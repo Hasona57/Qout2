@@ -80,7 +80,6 @@ const translations: Record<Language, Record<string, string>> = {
     
     // Orders
     'order': 'طلب',
-    'orders': 'الطلبات',
     'orderNumber': 'رقم الطلب',
     'customer': 'العميل',
     'orderDate': 'تاريخ الطلب',
@@ -107,7 +106,6 @@ const translations: Record<Language, Record<string, string>> = {
     
     // Users
     'user': 'مستخدم',
-    'users': 'المستخدمون',
     'newUser': 'مستخدم جديد',
     'editUser': 'تعديل المستخدم',
     'role': 'الدور',
@@ -144,7 +142,6 @@ const translations: Record<Language, Record<string, string>> = {
     
     // Reports
     'report': 'تقرير',
-    'reports': 'التقارير',
     'salesReport': 'تقرير المبيعات',
     'profitReport': 'تقرير الأرباح',
     'period': 'الفترة',
@@ -219,7 +216,6 @@ const translations: Record<Language, Record<string, string>> = {
     
     // Orders
     'order': 'Order',
-    'orders': 'Orders',
     'orderNumber': 'Order Number',
     'customer': 'Customer',
     'orderDate': 'Order Date',
@@ -246,7 +242,6 @@ const translations: Record<Language, Record<string, string>> = {
     
     // Users
     'user': 'User',
-    'users': 'Users',
     'newUser': 'New User',
     'editUser': 'Edit User',
     'role': 'Role',
@@ -283,7 +278,6 @@ const translations: Record<Language, Record<string, string>> = {
     
     // Reports
     'report': 'Report',
-    'reports': 'Reports',
     'salesReport': 'Sales Report',
     'profitReport': 'Profit Report',
     'period': 'Period',
