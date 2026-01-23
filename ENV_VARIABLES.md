@@ -68,3 +68,4 @@ NODE_ENV=production
 أنشئ ملف `.env.local` في كل frontend مع المتغيرات أعلاه.
 
 
+
