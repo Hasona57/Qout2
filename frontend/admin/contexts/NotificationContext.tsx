@@ -51,7 +51,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     )
 }
 
-function ToastWrapper({ id, message, type, onClose, index }: any) {
+function ToastWrapper({ id, message, type, onClose, index }: { id: string; message: string; type: ToastType; onClose: (id: string) => void; index: number }) {
     // Simple wrapper to avoid the Portal inside the Portal if we changed approach
     // But since I wrote Toast.tsx to use Portal, let's just use it? 
     // Actually, multiple Portals to body will stack on top of each other (z-index).
@@ -66,7 +66,7 @@ function ToastWrapper({ id, message, type, onClose, index }: any) {
 }
 
 // Temporary internal component until I update the file
-function ToastInner({ id, message, type, onClose }: any) {
+function ToastInner({ id, message, type, onClose }: { id: string; message: string; type: ToastType; onClose: (id: string) => void }) {
     const [isExiting, setIsExiting] = useState(false)
 
     React.useEffect(() => {
@@ -79,14 +79,14 @@ function ToastInner({ id, message, type, onClose }: any) {
         setTimeout(() => onClose(id), 300)
     }
 
-    const bgColors = {
+    const bgColors: Record<ToastType, string> = {
         success: 'bg-green-50 border-green-200 text-green-800',
         error: 'bg-red-50 border-red-200 text-red-800',
         info: 'bg-blue-50 border-blue-200 text-blue-800',
         warning: 'bg-yellow-50 border-yellow-200 text-yellow-800',
     }
 
-    const icons = {
+    const icons: Record<ToastType, string> = {
         success: '✅',
         error: '❌',
         info: 'ℹ️',
