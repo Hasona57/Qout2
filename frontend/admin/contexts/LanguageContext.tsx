@@ -61,7 +61,6 @@ const translations: Record<Language, Record<string, string>> = {
     
     // Products
     'product': 'منتج',
-    'products': 'المنتجات',
     'newProduct': 'منتج جديد',
     'editProduct': 'تعديل المنتج',
     'productName': 'اسم المنتج',
@@ -201,7 +200,6 @@ const translations: Record<Language, Record<string, string>> = {
     
     // Products
     'product': 'Product',
-    'products': 'Products',
     'newProduct': 'New Product',
     'editProduct': 'Edit Product',
     'productName': 'Product Name',
@@ -293,7 +291,6 @@ const translations: Record<Language, Record<string, string>> = {
     'to': 'To',
     'generate': 'Generate',
     'logout': 'Logout',
-    'dashboard': 'Dashboard',
     'assignStock': 'Assign Stock',
     'factoryCalculator': 'Factory Calculator',
     'financeExpenses': 'Finance & Expenses',
