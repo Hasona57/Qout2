@@ -1,0 +1,192 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: qote-postgres
+    environment:
+      POSTGRES_DB: qote_db
+      POSTGRES_USER: qote_user
+      POSTGRES_PASSWORD: qote_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - qote-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qote_user -d qote_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: qote-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - qote-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # RabbitMQ Message Queue
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: qote-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: qote_user
+      RABBITMQ_DEFAULT_PASS: qote_password
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - qote-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: qote-minio
+    environment:
+      MINIO_ROOT_USER: qote_admin
+      MINIO_ROOT_PASSWORD: qote_password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - qote-network
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Backend API (NestJS)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: qote-backend
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://qote_user:qote_password@postgres:5432/qote_db
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: qote_user
+      DB_PASSWORD: qote_password
+      DB_DATABASE: qote_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_URL: amqp://qote_user:qote_password@rabbitmq:5672
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: qote_admin
+      MINIO_SECRET_KEY: qote_password
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      JWT_EXPIRES_IN: 7d
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - qote-network
+    command: npm run start:dev
+
+  # Customer Store (Next.js)
+  store:
+    build:
+      context: ./frontend/store
+      dockerfile: Dockerfile
+    container_name: qote-store
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:3000/api
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./frontend/store:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    networks:
+      - qote-network
+    command: npm run dev
+
+  # Admin Panel (Next.js)
+  admin:
+    build:
+      context: ./frontend/admin
+      dockerfile: Dockerfile
+    container_name: qote-admin
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:3000/api
+    ports:
+      - "3002:3000"
+    volumes:
+      - ./frontend/admin:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    networks:
+      - qote-network
+    command: npm run dev
+
+  # Web POS (Next.js)
+  pos:
+    build:
+      context: ./frontend/pos
+      dockerfile: Dockerfile
+    container_name: qote-pos
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:3000/api
+    ports:
+      - "3003:3000"
+    volumes:
+      - ./frontend/pos:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    networks:
+      - qote-network
+    command: npm run dev
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  minio_data:
+
+networks:
+  qote-network:
+    driver: bridge
+

@@ -1,0 +1,9 @@
+{
+  "appName": "qote-backend",
+  "framework": "nodejs",
+  "buildCommand": "npm install && npm run build",
+  "startCommand": "npm run start:prod",
+  "nodeVersion": "18"
+}
+
+

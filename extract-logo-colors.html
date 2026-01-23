@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logo Color Extractor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .upload-area {
+            border: 2px dashed #ccc;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+        }
+        .upload-area:hover {
+            border-color: #999;
+        }
+        #preview {
+            max-width: 100%;
+            margin: 20px 0;
+        }
+        .colors {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .color-box {
+            width: 100px;
+            height: 100px;
+            border: 2px solid #333;
+            position: relative;
+        }
+        .color-info {
+            position: absolute;
+            bottom: -30px;
+            left: 0;
+            right: 0;
+            font-size: 12px;
+            text-align: center;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .output {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>Logo Color Extractor</h1>
+    <p>Upload your logo to extract the dominant colors</p>
+    
+    <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+        <p>Click to upload logo image</p>
+        <input type="file" id="fileInput" accept="image/*" style="display: none;">
+    </div>
+    
+    <img id="preview" style="display: none;">
+    <div id="colors" class="colors"></div>
+    <div id="output" class="output" style="display: none;"></div>
+    
+    <script>
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = document.getElementById('preview');
+                img.src = event.target.result;
+                img.style.display = 'block';
+                
+                img.onload = function() {
+                    extractColors(img);
+                };
+            };
+            reader.readAsDataURL(file);
+        });
+        
+        function extractColors(img) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            const colorMap = {};
+            
+            // Sample colors (every 10th pixel for performance)
+            for (let i = 0; i < data.length; i += 40) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+                const a = data[i + 3];
+                
+                if (a < 128) continue; // Skip transparent pixels
+                
+                // Quantize colors to reduce noise
+                const qr = Math.floor(r / 10) * 10;
+                const qg = Math.floor(g / 10) * 10;
+                const qb = Math.floor(b / 10) * 10;
+                const key = `${qr},${qg},${qb}`;
+                
+                colorMap[key] = (colorMap[key] || 0) + 1;
+            }
+            
+            // Get top colors
+            const sortedColors = Object.entries(colorMap)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10)
+                .map(([rgb, count]) => {
+                    const [r, g, b] = rgb.split(',').map(Number);
+                    return {
+                        rgb: `rgb(${r}, ${g}, ${b})`,
+                        hex: `#${[r, g, b].map(x => x.toString(16).padStart(2, '0')).join('')}`,
+                        count
+                    };
+                });
+            
+            displayColors(sortedColors);
+        }
+        
+        function displayColors(colors) {
+            const container = document.getElementById('colors');
+            container.innerHTML = '';
+            
+            colors.forEach((color, index) => {
+                const box = document.createElement('div');
+                box.className = 'color-box';
+                box.style.backgroundColor = color.hex;
+                
+                const info = document.createElement('div');
+                info.className = 'color-info';
+                info.textContent = color.hex;
+                
+                box.appendChild(info);
+                container.appendChild(box);
+            });
+            
+            // Generate Tailwind config
+            const primary = colors[0]?.hex || '#000000';
+            const secondary = colors[1]?.hex || '#000000';
+            
+            const output = `// Extracted colors from logo
+const NEW_COLORS = {
+  primary: '${primary}',
+  primaryDark: '${darkenColor(primary)}',
+  primaryLight: '${lightenColor(primary)}',
+  secondary: '${secondary}',
+  secondaryDark: '${darkenColor(secondary)}',
+  secondaryLight: '${lightenColor(secondary)}',
+};
+
+// Update this in update-colors-from-logo.js`;
+            
+            const outputDiv = document.getElementById('output');
+            outputDiv.textContent = output;
+            outputDiv.style.display = 'block';
+        }
+        
+        function darkenColor(hex) {
+            const num = parseInt(hex.replace('#', ''), 16);
+            const r = Math.max(0, (num >> 16) - 30);
+            const g = Math.max(0, ((num >> 8) & 0x00FF) - 30);
+            const b = Math.max(0, (num & 0x0000FF) - 30);
+            return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+        }
+        
+        function lightenColor(hex) {
+            const num = parseInt(hex.replace('#', ''), 16);
+            const r = Math.min(255, (num >> 16) + 30);
+            const g = Math.min(255, ((num >> 8) & 0x00FF) + 30);
+            const b = Math.min(255, (num & 0x0000FF) + 30);
+            return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+        }
+    </script>
+</body>
+</html>
+
+
+
+
+
+

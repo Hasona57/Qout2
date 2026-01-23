@@ -1,0 +1,18 @@
+# Koyeb configuration for Qote Backend
+# Deploy from Koyeb Dashboard or use Koyeb CLI
+
+name: qote-backend
+type: web
+framework: nodejs
+build:
+  command: npm install && npm run build
+run:
+  command: npm run start:prod
+env:
+  - name: NODE_ENV
+    value: production
+  - name: PORT
+    value: "3000"
+  # Add other environment variables in Koyeb Dashboard
+
+

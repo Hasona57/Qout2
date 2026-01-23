@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: qote-backend
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DB_TYPE
+        value: postgres
+      - key: DB_SSL
+        value: "true"
+      # Add your other environment variables in Render Dashboard
+
+

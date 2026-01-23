@@ -1,0 +1,34 @@
+{
+  "name": "qote-system",
+  "version": "1.0.0",
+  "description": "Qote Abaya Factory & Store System - Full Stack Application",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend/*"
+  ],
+  "scripts": {
+    "dev:backend": "cd backend && npm run start:dev",
+    "dev:store": "cd frontend/store && npm run dev",
+    "dev:admin": "cd frontend/admin && npm run dev",
+    "dev:pos": "cd frontend/pos && npm run dev",
+    "dev:all": "concurrently \"npm run dev:backend\" \"npm run dev:store\" \"npm run dev:admin\" \"npm run dev:pos\"",
+    "build:backend": "cd backend && npm run build",
+    "build:store": "cd frontend/store && npm run build",
+    "build:admin": "cd frontend/admin && npm run build",
+    "build:pos": "cd frontend/pos && npm run build",
+    "build:all": "npm run build:backend && npm run build:store && npm run build:admin && npm run build:pos",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend/store && npm install && cd ../admin && npm install && cd ../pos && npm install",
+    "migration:run": "cd backend && npm run migration:run",
+    "migration:generate": "cd backend && npm run migration:generate",
+    "seed": "cd backend && npm run seed:run"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
+
