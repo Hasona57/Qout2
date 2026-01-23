@@ -93,17 +93,20 @@ function ToastInner({ id, message, type, onClose }: { id: string; message: strin
         warning: '⚠️',
     }
 
+    const bgColor = bgColors[type] || bgColors.info
+    const icon = icons[type] || icons.info
+
     return (
         <div
             className={`
         flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border bg-white
         transform transition-all duration-300 ease-out mb-2 w-80
-        ${bgColors[type]}
+        ${bgColor}
         ${isExiting ? 'opacity-0 translate-x-full' : 'opacity-100 translate-x-0'}
       `}
             role="alert"
         >
-            <span className="text-xl">{icons[type]}</span>
+            <span className="text-xl">{icon}</span>
             <p className="font-medium text-sm flex-1">{message}</p>
             <button onClick={handleClose} className="ml-2 opacity-50 hover:opacity-100">✕</button>
         </div>
