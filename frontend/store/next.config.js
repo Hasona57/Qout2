@@ -4,14 +4,7 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || '/api',
   },
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: 'http://127.0.0.1:3000/api/:path*',
-      },
-    ]
-  },
+  // Removed rewrites - API routes are handled by Next.js API routes in the same app
 }
 
 module.exports = nextConfig
