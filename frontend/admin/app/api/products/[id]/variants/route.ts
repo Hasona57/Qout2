@@ -3,10 +3,9 @@ import { getSupabaseServer } from '@/lib/supabase'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = await params
     const supabase = getSupabaseServer()
     
     let body: any = {}
@@ -43,7 +42,7 @@ export async function POST(
     const { data: product, error: productError } = await supabase
       .from('products')
       .select('id, costPrice, retailPrice')
-      .eq('id', id)
+      .eq('id', params.id)
       .single()
 
     if (productError || !product) {
@@ -57,7 +56,7 @@ export async function POST(
     const { data: existingVariants, error: checkError } = await supabase
       .from('product_variants')
       .select('id')
-      .eq('productId', id)
+      .eq('productId', params.id)
       .eq('sizeId', sizeId)
       .eq('colorId', colorId)
 
@@ -93,7 +92,7 @@ export async function POST(
 
     // Create variant
     const variantData: any = {
-      productId: id,
+      productId: params.id,
       sizeId,
       colorId,
       sku,

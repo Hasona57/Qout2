@@ -3,17 +3,16 @@ import { getSupabaseServer } from '@/lib/supabase'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = await params
     const supabase = getSupabaseServer()
 
     // Get product first
     const { data: product, error } = await supabase
       .from('products')
       .select('*')
-      .eq('id', id)
+      .eq('id', params.id)
       .single()
 
     if (error || !product) {
@@ -77,10 +76,9 @@ export async function GET(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = await params
     const supabase = getSupabaseServer()
     
     let body: any = {}
@@ -132,7 +130,7 @@ export async function PATCH(
       const { data: updatedProduct, error: productError } = await supabase
         .from('products')
         .update(updateData)
-        .eq('id', id)
+        .eq('id', params.id)
         .select()
         .single()
 
@@ -149,7 +147,7 @@ export async function PATCH(
       const { data: existingProduct, error: fetchError } = await supabase
         .from('products')
         .select('*')
-        .eq('id', id)
+        .eq('id', params.id)
         .single()
 
       if (fetchError) {
@@ -168,12 +166,12 @@ export async function PATCH(
       await supabase
         .from('product_images')
         .delete()
-        .eq('productId', id)
+        .eq('productId', params.id)
 
       // Insert new images
       if (images.length > 0) {
         const imageRecords = images.map((img: any, index: number) => ({
-          productId: id,
+          productId: params.id,
           url: typeof img === 'string' ? img : img.url,
           altTextAr: typeof img === 'object' ? img.altTextAr : null,
           altTextEn: typeof img === 'object' ? img.altTextEn : null,
@@ -231,7 +229,7 @@ export async function DELETE(
     const { error } = await supabase
       .from('products')
       .delete()
-      .eq('id', id)
+      .eq('id', params.id)
 
     if (error) {
       console.error('Error deleting product:', error)
