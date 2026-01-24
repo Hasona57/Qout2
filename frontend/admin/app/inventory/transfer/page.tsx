@@ -20,8 +20,10 @@ export default function StockTransferPage() {
     productId: string
     variantId: string
     quantity: string
+    availableQuantity?: number
   }>>([])
   const [loading, setLoading] = useState(false)
+  const [availableStock, setAvailableStock] = useState<Map<string, number>>(new Map())
 
   useEffect(() => {
     loadData()
@@ -51,13 +53,65 @@ export default function StockTransferPage() {
     setTransferItems(transferItems.filter((_, i) => i !== index))
   }
 
-  const updateTransferItem = (index: number, field: string, value: string) => {
+  const updateTransferItem = async (index: number, field: string, value: string) => {
     const updated = [...transferItems]
     updated[index] = { ...updated[index], [field]: value }
     if (field === 'productId') {
       updated[index].variantId = '' // Reset variant when product changes
+      updated[index].availableQuantity = undefined
+    }
+    if (field === 'variantId' && value && formData.fromLocationId) {
+      // Fetch available stock for this variant at source location
+      try {
+        const stockRes = await fetchWithAuth(`/inventory/stock?locationId=${formData.fromLocationId}`)
+        const stockData = await stockRes.json()
+        const stockItems = stockData.data || []
+        const variantStock = stockItems.find((s: any) => s.variantId === value)
+        const availableQty = variantStock ? parseFloat(String(variantStock.quantity || 0)) : 0
+        updated[index].availableQuantity = availableQty
+        setAvailableStock(new Map(availableStock.set(value, availableQty)))
+      } catch (error) {
+        console.error('Error fetching available stock:', error)
+        updated[index].availableQuantity = 0
+      }
     }
     setTransferItems(updated)
+  }
+
+  // Load available stock when source location changes
+  useEffect(() => {
+    if (formData.fromLocationId) {
+      loadAvailableStock()
+    } else {
+      setAvailableStock(new Map())
+      setTransferItems(items => items.map(item => ({ ...item, availableQuantity: undefined })))
+    }
+  }, [formData.fromLocationId])
+
+  const loadAvailableStock = async () => {
+    if (!formData.fromLocationId) return
+    try {
+      const stockRes = await fetchWithAuth(`/inventory/stock?locationId=${formData.fromLocationId}`)
+      const stockData = await stockRes.json()
+      const stockItems = stockData.data || []
+      const stockMap = new Map<string, number>()
+      stockItems.forEach((item: any) => {
+        if (item.variantId && item.quantity) {
+          stockMap.set(item.variantId, parseFloat(String(item.quantity || 0)))
+        }
+      })
+      setAvailableStock(stockMap)
+      
+      // Update available quantities for existing transfer items
+      setTransferItems(items => items.map(item => {
+        if (item.variantId) {
+          return { ...item, availableQuantity: stockMap.get(item.variantId) || 0 }
+        }
+        return item
+      }))
+    } catch (error) {
+      console.error('Error loading available stock:', error)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -72,6 +126,18 @@ export default function StockTransferPage() {
     }
     if (transferItems.some(item => !item.variantId || !item.quantity)) {
       showNotification('Please fill all item fields', 'error')
+      return
+    }
+
+    // Validate quantities
+    const invalidItems = transferItems.filter(item => {
+      const qty = parseFloat(item.quantity || '0')
+      const available = item.availableQuantity !== undefined ? item.availableQuantity : 0
+      return qty <= 0 || qty > available
+    })
+
+    if (invalidItems.length > 0) {
+      showNotification('Some items have invalid quantities. Please check available stock.', 'error')
       return
     }
 
@@ -219,17 +285,45 @@ export default function StockTransferPage() {
                       <div className="flex gap-2">
                         <div className="flex-1">
                           <label className="block text-sm font-medium text-gray-700 mb-2">
-                            الكمية
+                            الكمية {item.availableQuantity !== undefined && (
+                              <span className="text-xs text-gray-500 font-normal">
+                                (المتاح: {item.availableQuantity})
+                              </span>
+                            )}
                           </label>
                           <input
                             type="number"
                             step="1"
                             min="1"
+                            max={item.availableQuantity !== undefined ? item.availableQuantity : undefined}
                             value={item.quantity}
-                            onChange={(e) => updateTransferItem(index, 'quantity', e.target.value)}
+                            onChange={(e) => {
+                              const qty = e.target.value
+                              const maxQty = item.availableQuantity !== undefined ? item.availableQuantity : Infinity
+                              if (qty === '' || (parseFloat(qty) >= 1 && parseFloat(qty) <= maxQty)) {
+                                updateTransferItem(index, 'quantity', qty)
+                              }
+                            }}
                             required
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                              item.availableQuantity !== undefined && 
+                              parseFloat(item.quantity || '0') > item.availableQuantity
+                                ? 'border-red-500 bg-red-50' 
+                                : 'border-gray-300'
+                            }`}
+                            placeholder={item.availableQuantity !== undefined ? `حد أقصى: ${item.availableQuantity}` : ''}
                           />
+                          {item.availableQuantity !== undefined && 
+                           parseFloat(item.quantity || '0') > item.availableQuantity && (
+                            <p className="text-xs text-red-600 mt-1">
+                              الكمية المطلوبة ({item.quantity}) تتجاوز المتاح ({item.availableQuantity})
+                            </p>
+                          )}
+                          {item.availableQuantity !== undefined && item.availableQuantity === 0 && (
+                            <p className="text-xs text-red-600 mt-1">
+                              لا يوجد مخزون متاح لهذا المتغير في الموقع المصدر
+                            </p>
+                          )}
                         </div>
                         <button
                           type="button"

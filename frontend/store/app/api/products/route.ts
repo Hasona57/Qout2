@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
       const sizeMap = new Map((sizesResult.data || []).map((s: any) => [s.id, s]))
       const colorMap = new Map((colorsResult.data || []).map((c: any) => [c.id, c]))
 
-      // Get stock if locationId provided
+      // Get stock if locationId provided - only items with quantity > 0
       let stockMap = new Map()
       if (locationId && variants) {
         const variantIds = variants.map((v: any) => v.id)
@@ -83,8 +83,25 @@ export async function GET(request: NextRequest) {
           .from('stock_items')
           .select('variantId, quantity')
           .eq('locationId', locationId)
+          .gt('quantity', 0) // Only get items with available stock
           .in('variantId', variantIds)
-        stockMap = new Map((stockData || []).map((s: any) => [s.variantId, s.quantity]))
+        stockMap = new Map((stockData || []).map((s: any) => [s.variantId, parseFloat(String(s.quantity || 0))]))
+      } else if (variants) {
+        // If no locationId, get stock from all locations and sum
+        const variantIds = variants.map((v: any) => v.id)
+        const { data: stockData } = await supabase
+          .from('stock_items')
+          .select('variantId, quantity')
+          .gt('quantity', 0) // Only get items with available stock
+          .in('variantId', variantIds)
+        
+        // Sum quantities for each variant across all locations
+        const stockSum = new Map<string, number>()
+        stockData?.forEach((s: any) => {
+          const current = stockSum.get(s.variantId) || 0
+          stockSum.set(s.variantId, current + parseFloat(String(s.quantity || 0)))
+        })
+        stockMap = stockSum
       }
 
       // Combine data

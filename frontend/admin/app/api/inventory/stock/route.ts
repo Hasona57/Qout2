@@ -8,10 +8,11 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseServer()
 
-    // Get stock items
+    // Get stock items - only show items with quantity > 0
     let stockQuery = supabase
       .from('stock_items')
       .select('*')
+      .gt('quantity', 0) // Only show items with available stock
 
     if (locationId) {
       stockQuery = stockQuery.eq('locationId', locationId)
