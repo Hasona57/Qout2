@@ -8,7 +8,17 @@ export async function POST(
   try {
     const { id } = await params
     const supabase = getSupabaseServer()
-    const body = await request.json()
+    
+    let body: any = {}
+    try {
+      body = await request.json()
+    } catch (jsonError: any) {
+      console.error('Error parsing JSON:', jsonError)
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body', success: false },
+        { status: 400 }
+      )
+    }
 
     const {
       sizeId,
@@ -76,15 +86,33 @@ export async function POST(
 
     // Handle costPrice and retailPrice
     if (costPrice !== undefined && costPrice !== null && costPrice !== '') {
-      variantData.costPrice = parseFloat(String(costPrice))
-    } else if (product.costPrice) {
-      variantData.costPrice = parseFloat(String(product.costPrice))
+      const parsedCost = parseFloat(String(costPrice))
+      if (!isNaN(parsedCost)) {
+        variantData.costPrice = parsedCost
+      }
+    } else if (product.costPrice !== undefined && product.costPrice !== null) {
+      const parsedCost = parseFloat(String(product.costPrice))
+      if (!isNaN(parsedCost)) {
+        variantData.costPrice = parsedCost
+      }
     }
 
     if (retailPrice !== undefined && retailPrice !== null && retailPrice !== '') {
-      variantData.retailPrice = parseFloat(String(retailPrice))
-    } else if (product.retailPrice) {
-      variantData.retailPrice = parseFloat(String(product.retailPrice))
+      const parsedRetail = parseFloat(String(retailPrice))
+      if (!isNaN(parsedRetail)) {
+        variantData.retailPrice = parsedRetail
+      }
+    } else if (product.retailPrice !== undefined && product.retailPrice !== null) {
+      const parsedRetail = parseFloat(String(product.retailPrice))
+      if (!isNaN(parsedRetail)) {
+        variantData.retailPrice = parsedRetail
+      }
+    }
+
+    // Ensure at least one price is set (required by database)
+    if (!variantData.costPrice && !variantData.retailPrice) {
+      variantData.costPrice = 0
+      variantData.retailPrice = 0
     }
 
     const { data: variant, error: variantError } = await supabase
@@ -95,8 +123,13 @@ export async function POST(
 
     if (variantError) {
       console.error('Error creating variant:', variantError)
+      console.error('Variant data attempted:', JSON.stringify(variantData, null, 2))
       return NextResponse.json(
-        { error: variantError.message || 'Failed to create variant', success: false },
+        { 
+          error: variantError.message || 'Failed to create variant', 
+          success: false,
+          details: variantError.details || variantError.hint || undefined
+        },
         { status: 500 }
       )
     }
@@ -104,8 +137,13 @@ export async function POST(
     return NextResponse.json({ data: variant, success: true })
   } catch (error: any) {
     console.error('Error in POST variants route:', error)
+    console.error('Error stack:', error.stack)
     return NextResponse.json(
-      { error: error.message || 'Failed to create variant', success: false },
+      { 
+        error: error.message || 'Failed to create variant', 
+        success: false,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      },
       { status: 500 }
     )
   }
