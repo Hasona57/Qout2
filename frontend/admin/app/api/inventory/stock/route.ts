@@ -17,12 +17,14 @@ export async function GET(request: NextRequest) {
       stockQuery = stockQuery.eq('locationId', locationId)
     }
 
-    const { data: stock, error } = await stockQuery
+    const { data: stockData, error } = await stockQuery
 
     if (error) {
       console.error('Error fetching stock:', error)
       return NextResponse.json({ data: [], success: true })
     }
+
+    let stock = stockData || []
 
     // Get related data
     if (stock && stock.length > 0) {

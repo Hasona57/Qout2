@@ -5,7 +5,7 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = getSupabaseServer()
 
-    const { data: transfers, error } = await supabase
+    const { data: transfersData, error } = await supabase
       .from('stock_transfers')
       .select('*')
       .order('createdAt', { ascending: false })
@@ -14,6 +14,8 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching transfers:', error)
       return NextResponse.json({ data: [], success: true })
     }
+
+    let transfers = transfersData || []
 
     // Get related data
     if (transfers && transfers.length > 0) {
