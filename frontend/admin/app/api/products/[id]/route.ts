@@ -197,10 +197,21 @@ export async function PATCH(
       }
     }
 
+    if (!product) {
+      return NextResponse.json(
+        { error: 'Product not found after update', success: false },
+        { status: 404 }
+      )
+    }
+
     return NextResponse.json({ data: product, success: true })
   } catch (error: any) {
     console.error('Error in PATCH product route:', error)
     console.error('Error stack:', error.stack)
+    console.error('Error name:', error.name)
+    console.error('Error message:', error.message)
+    
+    // Return proper error response
     return NextResponse.json(
       { 
         error: error.message || 'Failed to update product', 
