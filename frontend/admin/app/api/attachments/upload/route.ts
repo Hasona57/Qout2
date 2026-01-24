@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseServer } from '@/lib/supabase'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID } from 'crypto'
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,8 +20,8 @@ export async function POST(request: NextRequest) {
 
     // Generate unique filename
     const fileExtension = file.name.split('.').pop()
-    const fileName = `${uuidv4()}.${fileExtension}`
-    const finalEntityId = !entityId || entityId === 'temp' ? uuidv4() : entityId
+    const fileName = `${randomUUID()}.${fileExtension}`
+    const finalEntityId = !entityId || entityId === 'temp' ? randomUUID() : entityId
     const filePath = `${entityType}/${finalEntityId}/${fileName}`
 
     // Convert File to ArrayBuffer
