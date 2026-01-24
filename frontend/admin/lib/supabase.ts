@@ -15,7 +15,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
 // For server-side operations (API Routes)
 export const getSupabaseServer = () => {
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey
+  // Use service role key for admin operations (bypasses RLS)
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFscGtob2ZuaW53ZWdyenlxZ21wIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTE4MDE2OSwiZXhwIjoyMDg0NzU2MTY5fQ.bF022Px5expD9sSLZUzclhbH5FdKiOSUSNJLbMUyl3k'
   return createClient(supabaseUrl, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
