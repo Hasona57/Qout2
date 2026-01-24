@@ -22,9 +22,17 @@ export async function GET(
       .eq('variantId', params.id)
 
     if (error) {
-      console.error('Error fetching stock:', error)
-      return NextResponse.json({ data: [], success: true })
+      console.error('Error fetching stock for variant:', params.id, error)
+      console.error('Error details:', error.message, error.code, error.details)
+      return NextResponse.json({ 
+        data: [], 
+        success: false,
+        error: error.message || 'Failed to fetch stock',
+        details: process.env.NODE_ENV === 'development' ? error : undefined
+      }, { status: 500 })
     }
+
+    console.log(`Fetched ${stockData?.length || 0} stock items for variant ${params.id}`)
 
     let stock = stockData || []
 
