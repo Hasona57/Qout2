@@ -109,20 +109,41 @@ export async function PATCH(
     if (isActive !== undefined) updateData.isActive = isActive
     if (isFeatured !== undefined) updateData.isFeatured = isFeatured
 
-    // Update product
-    const { data: product, error: productError } = await supabase
-      .from('products')
-      .update(updateData)
-      .eq('id', params.id)
-      .select()
-      .single()
+    // Get product first (needed for images update)
+    let product: any = null
+    if (Object.keys(updateData).length > 0) {
+      // Update product only if there's data to update
+      const { data: updatedProduct, error: productError } = await supabase
+        .from('products')
+        .update(updateData)
+        .eq('id', params.id)
+        .select()
+        .single()
 
-    if (productError) {
-      console.error('Error updating product:', productError)
-      return NextResponse.json(
-        { error: productError.message || 'Failed to update product', success: false },
-        { status: 500 }
-      )
+      if (productError) {
+        console.error('Error updating product:', productError)
+        return NextResponse.json(
+          { error: productError.message || 'Failed to update product', success: false },
+          { status: 500 }
+        )
+      }
+      product = updatedProduct
+    } else {
+      // If no update data, just get the product
+      const { data: existingProduct, error: fetchError } = await supabase
+        .from('products')
+        .select('*')
+        .eq('id', params.id)
+        .single()
+
+      if (fetchError) {
+        console.error('Error fetching product:', fetchError)
+        return NextResponse.json(
+          { error: 'Product not found', success: false },
+          { status: 404 }
+        )
+      }
+      product = existingProduct
     }
 
     // Handle images if provided

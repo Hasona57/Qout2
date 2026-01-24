@@ -43,15 +43,19 @@ export async function POST(
     }
 
     // Check if variant already exists
-    const { data: existingVariant } = await supabase
+    const { data: existingVariants, error: checkError } = await supabase
       .from('product_variants')
       .select('id')
       .eq('productId', params.id)
       .eq('sizeId', sizeId)
       .eq('colorId', colorId)
-      .single()
 
-    if (existingVariant) {
+    // If checkError is not "no rows found", log it but continue
+    if (checkError && checkError.code !== 'PGRST116') {
+      console.error('Error checking existing variant:', checkError)
+    }
+
+    if (existingVariants && existingVariants.length > 0) {
       return NextResponse.json(
         { error: 'Variant with this size and color already exists', success: false },
         { status: 400 }
