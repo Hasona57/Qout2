@@ -165,6 +165,8 @@ export default function StockTransferPage() {
       const data = await response.json()
       if (data.success) {
         showNotification('Stock transferred successfully!', 'success')
+        // Refresh data before navigating
+        await loadData()
         router.push('/inventory')
       } else {
         showNotification(data.error || 'Failed to transfer stock', 'error')

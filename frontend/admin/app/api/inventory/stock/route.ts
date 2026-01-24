@@ -8,11 +8,11 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseServer()
 
-    // Get stock items - only show items with quantity > 0
+    // Get stock items - show all items (including 0 quantity) for admin view
+    // But we can filter to show only available if needed
     let stockQuery = supabase
       .from('stock_items')
       .select('*')
-      .gt('quantity', 0) // Only show items with available stock
 
     if (locationId) {
       stockQuery = stockQuery.eq('locationId', locationId)
@@ -37,14 +37,43 @@ export async function GET(request: NextRequest) {
         locationIds.length > 0 ? supabase.from('stock_locations').select('*').in('id', locationIds) : { data: [] },
       ])
 
-      const variantMap = new Map((variantsResult.data || []).map((v: any) => [v.id, v]))
+      const variants = variantsResult.data || []
+      const productIds = [...new Set(variants.map((v: any) => v.productId).filter(Boolean))]
+      
+      // Get products
+      const { data: products } = productIds.length > 0 ? await supabase
+        .from('products')
+        .select('*')
+        .in('id', productIds) : { data: [] }
+
+      // Get sizes and colors for variants
+      const sizeIds = [...new Set(variants.map((v: any) => v.sizeId).filter(Boolean))]
+      const colorIds = [...new Set(variants.map((v: any) => v.colorId).filter(Boolean))]
+
+      const [sizesResult, colorsResult] = await Promise.all([
+        sizeIds.length > 0 ? supabase.from('sizes').select('*').in('id', sizeIds) : { data: [] },
+        colorIds.length > 0 ? supabase.from('colors').select('*').in('id', colorIds) : { data: [] },
+      ])
+
+      const productMap = new Map((products || []).map((p: any) => [p.id, p]))
+      const sizeMap = new Map((sizesResult.data || []).map((s: any) => [s.id, s]))
+      const colorMap = new Map((colorsResult.data || []).map((c: any) => [c.id, c]))
       const locationMap = new Map((locationsResult.data || []).map((l: any) => [l.id, l]))
 
-      stock = stock.map((item: any) => ({
-        ...item,
-        variant: variantMap.get(item.variantId) || null,
-        location: locationMap.get(item.locationId) || null,
-      }))
+      stock = stock.map((item: any) => {
+        const variant = variants.find((v: any) => v.id === item.variantId)
+        const product = variant ? productMap.get(variant.productId) : null
+        return {
+          ...item,
+          variant: variant ? {
+            ...variant,
+            product: product || null,
+            size: sizeMap.get(variant.sizeId) || null,
+            color: colorMap.get(variant.colorId) || null,
+          } : null,
+          location: locationMap.get(item.locationId) || null,
+        }
+      })
     }
 
     return NextResponse.json({ data: stock || [], success: true })

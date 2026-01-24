@@ -18,7 +18,31 @@ export default function InventoryPage() {
   useEffect(() => {
     if (selectedLocation) {
       loadStock()
+    } else {
+      setStockItems([])
     }
+  }, [selectedLocation])
+
+  // Refresh data when page becomes visible (e.g., returning from other pages)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && selectedLocation) {
+        loadStock()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [selectedLocation])
+
+  // Refresh on focus
+  useEffect(() => {
+    const handleFocus = () => {
+      if (selectedLocation) {
+        loadStock()
+      }
+    }
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
   }, [selectedLocation])
 
   const loadLocations = async () => {
@@ -40,13 +64,22 @@ export default function InventoryPage() {
   }
 
   const loadStock = async () => {
-    if (!selectedLocation) return
+    if (!selectedLocation) {
+      setStockItems([])
+      return
+    }
+    setLoading(true)
     try {
       const response = await fetchWithAuth(`/inventory/stock?locationId=${selectedLocation}`)
       const data = await response.json()
-      setStockItems(data.data || [])
+      // Filter to show only items with quantity > 0 for better UX
+      const availableStock = (data.data || []).filter((item: any) => parseFloat(String(item.quantity || 0)) > 0)
+      setStockItems(availableStock)
     } catch (error) {
       console.error('Error loading stock:', error)
+      setStockItems([])
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -75,17 +108,37 @@ export default function InventoryPage() {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Select Location
           </label>
-          <select
-            value={selectedLocation}
-            onChange={(e) => setSelectedLocation(e.target.value)}
-            className="w-full md:w-64 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            {locations.map((location) => (
-              <option key={location.id} value={location.id}>
-                {location.name}
-              </option>
-            ))}
-          </select>
+          <div className="flex gap-2 items-center">
+            <select
+              value={selectedLocation}
+              onChange={(e) => {
+                setSelectedLocation(e.target.value)
+                setStockItems([]) // Clear previous data immediately
+              }}
+              className="w-full md:w-64 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">Select a location</option>
+              {locations.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.name}
+                </option>
+              ))}
+            </select>
+            {selectedLocation && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectedLocation) {
+                    loadStock()
+                  }
+                }}
+                className="px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition"
+                title="Refresh stock data"
+              >
+                🔄
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -93,9 +146,15 @@ export default function InventoryPage() {
             <h2 className="text-xl font-semibold">Stock Items</h2>
           </div>
           <div className="p-6">
-            {stockItems.length === 0 ? (
+            {loading ? (
               <div className="text-center py-12 text-gray-500">
-                No stock items found. Add products and variants to see inventory.
+                Loading stock...
+              </div>
+            ) : stockItems.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                {selectedLocation 
+                  ? `No stock items found at this location. Add products and variants, then assign stock to this location.`
+                  : 'Please select a location to view stock.'}
               </div>
             ) : (
               <table className="min-w-full divide-y divide-gray-200">
@@ -125,7 +184,7 @@ export default function InventoryPage() {
                   {stockItems.map((item) => (
                     <tr key={item.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {item.variant?.product?.nameEn} - {item.variant?.size?.code} / {item.variant?.color?.code}
+                        {item.variant?.product?.nameEn || item.variant?.product?.nameAr || 'Unknown Product'} - {item.variant?.size?.code || 'N/A'} / {item.variant?.color?.code || 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {item.variant?.sku}
