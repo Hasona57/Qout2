@@ -110,5 +110,89 @@ export async function GET(request: NextRequest) {
   }
 }
 
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = getSupabaseServer()
+    const body = await request.json()
+
+    const {
+      nameAr,
+      nameEn,
+      descriptionAr,
+      descriptionEn,
+      sku,
+      categoryId,
+      costPrice,
+      retailPrice,
+      isActive = true,
+      isFeatured = false,
+      images = [],
+    } = body
+
+    // Validate required fields
+    if (!nameAr || !nameEn) {
+      return NextResponse.json(
+        { error: 'nameAr and nameEn are required', success: false },
+        { status: 400 }
+      )
+    }
+
+    // Create product
+    const { data: product, error: productError } = await supabase
+      .from('products')
+      .insert({
+        nameAr,
+        nameEn,
+        descriptionAr: descriptionAr || null,
+        descriptionEn: descriptionEn || null,
+        sku: sku || null,
+        categoryId: categoryId || null,
+        costPrice: parseFloat(costPrice || '0'),
+        retailPrice: parseFloat(retailPrice || '0'),
+        isActive: isActive !== false,
+        isFeatured: isFeatured === true,
+      })
+      .select()
+      .single()
+
+    if (productError) {
+      console.error('Error creating product:', productError)
+      return NextResponse.json(
+        { error: productError.message || 'Failed to create product', success: false },
+        { status: 500 }
+      )
+    }
+
+    // Create product images if provided
+    if (images && images.length > 0 && product) {
+      const imageRecords = images.map((img: any, index: number) => ({
+        productId: product.id,
+        url: typeof img === 'string' ? img : img.url,
+        altTextAr: typeof img === 'object' ? img.altTextAr : null,
+        altTextEn: typeof img === 'object' ? img.altTextEn : null,
+        sortOrder: index,
+        isPrimary: index === 0,
+      }))
+
+      const { error: imagesError } = await supabase
+        .from('product_images')
+        .insert(imageRecords)
+
+      if (imagesError) {
+        console.error('Error creating product images:', imagesError)
+        // Don't fail the whole request if images fail
+      }
+    }
+
+    return NextResponse.json({ data: product, success: true })
+  } catch (error: any) {
+    console.error('Error in POST products route:', error)
+    return NextResponse.json(
+      { error: error.message || 'Failed to create product', success: false },
+      { status: 500 }
+    )
+  }
+}
+
 
 
