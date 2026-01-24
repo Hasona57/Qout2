@@ -75,33 +75,82 @@ export async function GET(request: NextRequest) {
       const sizeMap = new Map((sizesResult.data || []).map((s: any) => [s.id, s]))
       const colorMap = new Map((colorsResult.data || []).map((c: any) => [c.id, c]))
 
-      // Get stock if locationId provided - only items with quantity > 0
-      let stockMap = new Map()
-      if (locationId && variants) {
+      // Get stock - try to find store location first, then fallback to all locations
+      let stockMap = new Map<string, number>()
+      if (variants && variants.length > 0) {
         const variantIds = variants.map((v: any) => v.id)
-        const { data: stockData } = await supabase
-          .from('stock_items')
-          .select('variantId, quantity')
-          .eq('locationId', locationId)
-          .gt('quantity', 0) // Only get items with available stock
-          .in('variantId', variantIds)
-        stockMap = new Map((stockData || []).map((s: any) => [s.variantId, parseFloat(String(s.quantity || 0))]))
-      } else if (variants) {
-        // If no locationId, get stock from all locations and sum
-        const variantIds = variants.map((v: any) => v.id)
-        const { data: stockData } = await supabase
-          .from('stock_items')
-          .select('variantId, quantity')
-          .gt('quantity', 0) // Only get items with available stock
-          .in('variantId', variantIds)
         
-        // Sum quantities for each variant across all locations
-        const stockSum = new Map<string, number>()
-        stockData?.forEach((s: any) => {
-          const current = stockSum.get(s.variantId) || 0
-          stockSum.set(s.variantId, current + parseFloat(String(s.quantity || 0)))
-        })
-        stockMap = stockSum
+        // Try to find store location
+        const { data: storeLocation } = await supabase
+          .from('stock_locations')
+          .select('id')
+          .or('name.ilike.%store%,name.ilike.%متجر%')
+          .limit(1)
+          .maybeSingle()
+        
+        if (storeLocation && locationId && locationId === storeLocation.id) {
+          // Get stock from specific location if it's the store
+          const { data: stockData, error: stockError } = await supabase
+            .from('stock_items')
+            .select('variantId, quantity')
+            .eq('locationId', locationId)
+            .gt('quantity', 0)
+            .in('variantId', variantIds)
+          
+          if (stockError) {
+            console.error('Error fetching stock for location:', stockError)
+          } else {
+            stockMap = new Map((stockData || []).map((s: any) => [s.variantId, parseFloat(String(s.quantity || 0))]))
+          }
+        } else if (storeLocation) {
+          // Get stock from store location
+          const { data: stockData, error: stockError } = await supabase
+            .from('stock_items')
+            .select('variantId, quantity')
+            .eq('locationId', storeLocation.id)
+            .gt('quantity', 0)
+            .in('variantId', variantIds)
+          
+          if (stockError) {
+            console.error('Error fetching stock from store location:', stockError)
+          } else {
+            stockMap = new Map((stockData || []).map((s: any) => [s.variantId, parseFloat(String(s.quantity || 0))]))
+          }
+        } else if (locationId) {
+          // Get stock from specified location
+          const { data: stockData, error: stockError } = await supabase
+            .from('stock_items')
+            .select('variantId, quantity')
+            .eq('locationId', locationId)
+            .gt('quantity', 0)
+            .in('variantId', variantIds)
+          
+          if (stockError) {
+            console.error('Error fetching stock for location:', stockError)
+          } else {
+            stockMap = new Map((stockData || []).map((s: any) => [s.variantId, parseFloat(String(s.quantity || 0))]))
+          }
+        } else {
+          // Sum stock from all locations
+          const { data: stockData, error: stockError } = await supabase
+            .from('stock_items')
+            .select('variantId, quantity')
+            .gt('quantity', 0)
+            .in('variantId', variantIds)
+          
+          if (stockError) {
+            console.error('Error fetching stock from all locations:', stockError)
+          } else {
+            const stockSum = new Map<string, number>()
+            stockData?.forEach((s: any) => {
+              const current = stockSum.get(s.variantId) || 0
+              stockSum.set(s.variantId, current + parseFloat(String(s.quantity || 0)))
+            })
+            stockMap = stockSum
+          }
+        }
+        
+        console.log(`Stock map created with ${stockMap.size} variants for ${variants.length} total variants`)
       }
 
       // Combine data

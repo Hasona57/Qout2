@@ -17,7 +17,12 @@ export default function InventoryPage() {
 
   useEffect(() => {
     if (selectedLocation) {
-      loadStock()
+      // Add a small delay to ensure location is set
+      const timer = setTimeout(() => {
+        console.log('Location changed, loading stock for:', selectedLocation)
+        loadStock()
+      }, 200)
+      return () => clearTimeout(timer)
     } else {
       setStockItems([])
     }

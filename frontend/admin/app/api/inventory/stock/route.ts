@@ -22,11 +22,19 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Error fetching stock:', error)
-      console.error('Error details:', error.message, error.code, error.details)
-      return NextResponse.json({ data: [], success: true })
+      console.error('Error details:', error.message, error.code, error.details, error.hint)
+      return NextResponse.json({ 
+        data: [], 
+        success: false, 
+        error: error.message || 'Failed to fetch stock',
+        details: process.env.NODE_ENV === 'development' ? error : undefined
+      }, { status: 500 })
     }
 
     console.log(`Fetched ${stockData?.length || 0} stock items for locationId: ${locationId || 'all'}`)
+    if (stockData && stockData.length > 0) {
+      console.log('Sample stock item:', JSON.stringify(stockData[0], null, 2))
+    }
     let stock = stockData || []
 
     // Get related data
