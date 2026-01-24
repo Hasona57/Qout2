@@ -53,7 +53,7 @@ export async function POST(
       )
     }
 
-    // Check if variant already exists
+    // Check if variant already exists (by size/color combination)
     const { data: existingVariants, error: checkError } = await supabase
       .from('product_variants')
       .select('id')
@@ -69,6 +69,24 @@ export async function POST(
     if (existingVariants && existingVariants.length > 0) {
       return NextResponse.json(
         { error: 'Variant with this size and color already exists', success: false },
+        { status: 400 }
+      )
+    }
+
+    // Check if SKU already exists (SKU must be unique)
+    const { data: existingSku, error: skuCheckError } = await supabase
+      .from('product_variants')
+      .select('id')
+      .eq('sku', sku)
+      .limit(1)
+
+    if (skuCheckError && skuCheckError.code !== 'PGRST116') {
+      console.error('Error checking existing SKU:', skuCheckError)
+    }
+
+    if (existingSku && existingSku.length > 0) {
+      return NextResponse.json(
+        { error: 'SKU already exists. Please use a unique SKU', success: false },
         { status: 400 }
       )
     }
@@ -109,10 +127,23 @@ export async function POST(
       }
     }
 
-    // Ensure at least one price is set (required by database)
-    if (!variantData.costPrice && !variantData.retailPrice) {
+    // Ensure prices are set (use product prices as fallback)
+    if (variantData.costPrice === undefined || variantData.costPrice === null) {
+      variantData.costPrice = product.costPrice || 0
+    }
+    if (variantData.retailPrice === undefined || variantData.retailPrice === null) {
+      variantData.retailPrice = product.retailPrice || 0
+    }
+
+    // Validate numeric values
+    if (isNaN(variantData.costPrice) || variantData.costPrice < 0) {
       variantData.costPrice = 0
+    }
+    if (isNaN(variantData.retailPrice) || variantData.retailPrice < 0) {
       variantData.retailPrice = 0
+    }
+    if (isNaN(variantData.weight) || variantData.weight < 0) {
+      variantData.weight = 0.5
     }
 
     const { data: variant, error: variantError } = await supabase
