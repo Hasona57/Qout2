@@ -19,117 +19,109 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate unique filename
-    const fileExtension = file.name.split('.').pop()
+    const fileExtension = file.name.split('.').pop() || 'jpg'
     const fileName = `${randomUUID()}.${fileExtension}`
     const finalEntityId = !entityId || entityId === 'temp' ? randomUUID() : entityId
     const filePath = `${entityType}/${finalEntityId}/${fileName}`
 
-    // Convert File to ArrayBuffer
+    // Convert File to ArrayBuffer then to Uint8Array for Supabase
     const arrayBuffer = await file.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
+    const uint8Array = new Uint8Array(arrayBuffer)
 
-    // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('attachments') // Make sure this bucket exists in Supabase Storage
-      .upload(filePath, buffer, {
-        contentType: file.type,
-        upsert: false,
-      })
+    // Try uploading to Supabase Storage - try multiple bucket names
+    const bucketNames = ['product-images', 'attachments', 'images']
+    let uploadSuccess = false
+    let publicUrl = ''
+    let usedBucket = ''
 
-    if (uploadError) {
-      console.error('Error uploading to Supabase Storage:', uploadError)
-      // If bucket doesn't exist, try 'product-images' or create a fallback
-      const { data: altUploadData, error: altError } = await supabase.storage
-        .from('product-images')
-        .upload(filePath, buffer, {
-          contentType: file.type,
-          upsert: false,
-        })
+    for (const bucketName of bucketNames) {
+      try {
+        const { data, error } = await supabase.storage
+          .from(bucketName)
+          .upload(filePath, uint8Array, {
+            contentType: file.type || 'image/jpeg',
+            upsert: false,
+          })
 
-      if (altError) {
-        console.error('Error uploading to alternative bucket:', altError)
-        return NextResponse.json(
-          { error: 'Failed to upload file. Please ensure storage bucket exists.', success: false },
-          { status: 500 }
-        )
+        if (!error && data) {
+          // Get public URL
+          const { data: urlData } = supabase.storage
+            .from(bucketName)
+            .getPublicUrl(filePath)
+
+          publicUrl = urlData.publicUrl
+          usedBucket = bucketName
+          uploadSuccess = true
+          break
+        } else {
+          console.error(`Error uploading to ${bucketName}:`, error)
+        }
+      } catch (err) {
+        console.error(`Exception uploading to ${bucketName}:`, err)
+        continue
       }
+    }
 
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('product-images')
-        .getPublicUrl(filePath)
+    // If upload failed, return error
+    if (!uploadSuccess) {
+      console.error('Failed to upload to all storage buckets')
+      // Return a placeholder URL or error
+      return NextResponse.json(
+        { 
+          error: 'Failed to upload file. Please ensure a storage bucket (product-images, attachments, or images) exists in Supabase Storage.', 
+          success: false,
+          details: 'Create a public bucket in Supabase Storage dashboard'
+        },
+        { status: 500 }
+      )
+    }
 
-      // Save attachment record
+    // Try to save attachment record (optional - don't fail if this fails)
+    try {
       const { data: attachment, error: dbError } = await supabase
         .from('attachments')
         .insert({
           entityType,
           entityId: finalEntityId,
-          url: urlData.publicUrl,
+          url: publicUrl,
           fileName: file.name,
-          mimeType: file.type,
+          mimeType: file.type || 'image/jpeg',
           fileSize: file.size,
         })
         .select()
         .single()
 
-      if (dbError) {
-        console.error('Error saving attachment record:', dbError)
-        // Still return the URL even if DB save fails
+      if (!dbError && attachment) {
         return NextResponse.json({
-          data: {
-            url: urlData.publicUrl,
-            fileName: file.name,
-          },
+          data: attachment,
+          url: publicUrl,
           success: true,
         })
       }
-
-      return NextResponse.json({
-        data: attachment || { url: urlData.publicUrl, fileName: file.name },
-        success: true,
-      })
+    } catch (dbErr) {
+      console.error('Error saving attachment record (non-critical):', dbErr)
+      // Continue even if DB save fails
     }
 
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('attachments')
-      .getPublicUrl(filePath)
-
-    // Save attachment record
-    const { data: attachment, error: dbError } = await supabase
-      .from('attachments')
-      .insert({
+    // Return URL even if DB save failed
+    return NextResponse.json({
+      data: {
+        url: publicUrl,
+        fileName: file.name,
         entityType,
         entityId: finalEntityId,
-        url: urlData.publicUrl,
-        fileName: file.name,
-        mimeType: file.type,
-        fileSize: file.size,
-      })
-      .select()
-      .single()
-
-    if (dbError) {
-      console.error('Error saving attachment record:', dbError)
-      // Still return the URL even if DB save fails
-      return NextResponse.json({
-        data: {
-          url: urlData.publicUrl,
-          fileName: file.name,
-        },
-        success: true,
-      })
-    }
-
-    return NextResponse.json({
-      data: attachment || { url: urlData.publicUrl, fileName: file.name },
+      },
+      url: publicUrl,
       success: true,
     })
   } catch (error: any) {
     console.error('Error in upload route:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to upload file', success: false },
+      { 
+        error: error.message || 'Failed to upload file', 
+        success: false,
+        details: error.stack
+      },
       { status: 500 }
     )
   }
