@@ -7,26 +7,66 @@ export async function GET(
 ) {
   try {
     const supabase = getSupabaseServer()
-    const { data, error } = await supabase
+    
+    // Get product first
+    const { data: product, error } = await supabase
       .from('products')
-      .select(`
-        *,
-        variants (
-          *,
-          size:sizeId (*),
-          color:colorId (*)
-        ),
-        images (*),
-        category:categoryId (*)
-      `)
+      .select('*')
       .eq('id', params.id)
       .single()
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error || !product) {
+      console.error('Error fetching product:', error)
+      return NextResponse.json({ data: null, success: false, error: 'Product not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ data, success: true })
+    // Get related data
+    const productId = product.id
+
+    // Get variants
+    const { data: variants } = await supabase
+      .from('product_variants')
+      .select('*')
+      .eq('productId', productId)
+
+    // Get images
+    const { data: images } = await supabase
+      .from('product_images')
+      .select('*')
+      .eq('productId', productId)
+
+    // Get category
+    const { data: category } = product.categoryId ? await supabase
+      .from('categories')
+      .select('*')
+      .eq('id', product.categoryId)
+      .single() : { data: null }
+
+    // Get sizes and colors for variants
+    const sizeIds = [...new Set((variants || []).map((v: any) => v.sizeId).filter(Boolean))]
+    const colorIds = [...new Set((variants || []).map((v: any) => v.colorId).filter(Boolean))]
+
+    const [sizesResult, colorsResult] = await Promise.all([
+      sizeIds.length > 0 ? supabase.from('sizes').select('*').in('id', sizeIds) : { data: [] },
+      colorIds.length > 0 ? supabase.from('colors').select('*').in('id', colorIds) : { data: [] },
+    ])
+
+    const sizeMap = new Map((sizesResult.data || []).map((s: any) => [s.id, s]))
+    const colorMap = new Map((colorsResult.data || []).map((c: any) => [c.id, c]))
+
+    // Combine data
+    const productWithDetails = {
+      ...product,
+      category: category || null,
+      variants: (variants || []).map((v: any) => ({
+        ...v,
+        size: sizeMap.get(v.sizeId) || null,
+        color: colorMap.get(v.colorId) || null,
+      })),
+      images: images || [],
+    }
+
+    return NextResponse.json({ data: productWithDetails, success: true })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

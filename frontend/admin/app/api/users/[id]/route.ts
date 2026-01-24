@@ -8,22 +8,33 @@ export async function GET(
   try {
     const supabase = getSupabaseServer()
 
+    // Get user first
     const { data: user, error } = await supabase
       .from('users')
-      .select(`
-        *,
-        role:roleId(*)
-      `)
+      .select('*')
       .eq('id', params.id)
       .single()
 
-    if (error) {
+    if (error || !user) {
       console.error('Error fetching user:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ data: null, success: false, error: 'User not found' }, { status: 404 })
     }
 
+    // Get role
+    const { data: role } = user.roleId ? await supabase
+      .from('roles')
+      .select('*')
+      .eq('id', user.roleId)
+      .single() : { data: null }
+
     const { password, ...userWithoutPassword } = user
-    return NextResponse.json({ data: userWithoutPassword, success: true })
+    return NextResponse.json({ 
+      data: {
+        ...userWithoutPassword,
+        role: role || null,
+      }, 
+      success: true 
+    })
   } catch (error: any) {
     console.error('Error in user route:', error)
     return NextResponse.json({ error: error.message || 'Failed to fetch user' }, { status: 500 })

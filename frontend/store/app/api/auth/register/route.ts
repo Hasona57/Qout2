@@ -46,10 +46,7 @@ export async function POST(request: NextRequest) {
         roleId: customerRole.id,
         isActive: true,
       })
-      .select(`
-        *,
-        role:roleId (*)
-      `)
+      .select('*')
       .single()
 
     if (error) {
@@ -57,12 +54,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    // Get role
+    const { data: role } = await supabase
+      .from('roles')
+      .select('*')
+      .eq('id', user.roleId)
+      .single()
+
     // Generate JWT token
     const token = jwt.sign(
       { 
         sub: user.id, 
         email: user.email, 
-        role: user.role?.name || 'customer' 
+        role: role?.name || 'customer' 
       },
       JWT_SECRET,
       { expiresIn: '7d' }
@@ -79,7 +83,7 @@ export async function POST(request: NextRequest) {
           name: userWithoutPassword.name,
           email: userWithoutPassword.email,
           phone: userWithoutPassword.phone,
-          role: userWithoutPassword.role,
+          role: role || null,
         },
       },
       success: true,

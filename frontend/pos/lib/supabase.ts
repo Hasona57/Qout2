@@ -15,7 +15,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
 // For server-side operations (API Routes)
 export const getSupabaseServer = () => {
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!serviceRoleKey) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set in environment variables.')
+  }
   return createClient(supabaseUrl, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,

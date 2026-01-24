@@ -10,13 +10,10 @@ export async function POST(request: NextRequest) {
     const { email, password } = await request.json()
     const supabase = getSupabaseServer()
 
-    // Find user with role
+    // Find user first
     const { data: user, error } = await supabase
       .from('users')
-      .select(`
-        *,
-        role:roleId (*)
-      `)
+      .select('*')
       .eq('email', email)
       .eq('isActive', true)
       .single()
@@ -24,6 +21,13 @@ export async function POST(request: NextRequest) {
     if (error || !user) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
+
+    // Get role
+    const { data: role } = user.roleId ? await supabase
+      .from('roles')
+      .select('*')
+      .eq('id', user.roleId)
+      .single() : { data: null }
 
     // Verify password
     const isValid = await bcrypt.compare(password, user.password)
@@ -42,7 +46,7 @@ export async function POST(request: NextRequest) {
       { 
         sub: user.id, 
         email: user.email, 
-        role: user.role?.name || 'customer' 
+        role: role?.name || 'customer' 
       },
       JWT_SECRET,
       { expiresIn: '7d' }
@@ -59,7 +63,7 @@ export async function POST(request: NextRequest) {
           name: userWithoutPassword.name,
           email: userWithoutPassword.email,
           phone: userWithoutPassword.phone,
-          role: userWithoutPassword.role,
+          role: role || null,
           commissionRate: userWithoutPassword.commissionRate,
           employeeCode: userWithoutPassword.employeeCode,
         },

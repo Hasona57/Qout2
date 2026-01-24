@@ -35,52 +35,29 @@ export async function GET(
       .select('*')
       .eq('invoiceId', invoiceId)
 
-    // Get user
-    const { data: user } = invoice.createdById ? await supabase
-      .from('users')
-      .select('id, name, email')
-      .eq('id', invoice.createdById)
-      .single() : { data: null }
+    // Get variant details for items
+    const variantIds = [...new Set((items || []).map((item: any) => item.variantId).filter(Boolean))]
+    const { data: variants } = variantIds.length > 0 ? await supabase
+      .from('product_variants')
+      .select('*')
+      .in('id', variantIds) : { data: [] }
+
+    const variantMap = new Map((variants || []).map((v: any) => [v.id, v]))
 
     // Combine data
     const invoiceWithDetails = {
       ...invoice,
-      items: items || [],
+      items: (items || []).map((item: any) => ({
+        ...item,
+        variant: variantMap.get(item.variantId) || null,
+      })),
       payments: payments || [],
-      createdBy: user || null,
     }
 
     return NextResponse.json({ data: invoiceWithDetails, success: true })
   } catch (error: any) {
     console.error('Error in invoice route:', error)
-    return NextResponse.json({ error: error.message || 'Failed to fetch invoice' }, { status: 500 })
-  }
-}
-
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const body = await request.json()
-    const supabase = getSupabaseServer()
-
-    const { data: invoice, error } = await supabase
-      .from('invoices')
-      .update(body)
-      .eq('id', params.id)
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error updating invoice:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    return NextResponse.json({ data: invoice, success: true })
-  } catch (error: any) {
-    console.error('Error updating invoice:', error)
-    return NextResponse.json({ error: error.message || 'Failed to update invoice' }, { status: 500 })
+    return NextResponse.json({ data: null, success: false, error: error.message })
   }
 }
 
