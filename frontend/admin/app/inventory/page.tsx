@@ -70,15 +70,29 @@ export default function InventoryPage() {
     }
     setLoading(true)
     try {
+      console.log('Loading stock for location:', selectedLocation)
       const response = await fetchWithAuth(`/inventory/stock?locationId=${selectedLocation}`)
+      if (!response.ok) {
+        console.error('Failed to fetch stock:', response.status, response.statusText)
+        setStockItems([])
+        return
+      }
       const data = await response.json()
-      console.log('Stock data received:', data.data?.length, 'items for location:', selectedLocation)
+      console.log('Stock API response:', { success: data.success, count: data.data?.length, locationId: selectedLocation })
+      console.log('Stock data sample:', data.data?.slice(0, 2))
+      
       // Show all items (including 0 quantity) so admin can see what's assigned
       const allStock = data.data || []
       setStockItems(allStock)
-      console.log('Stock items set:', allStock.length)
-    } catch (error) {
+      console.log('Stock items set in state:', allStock.length)
+      
+      // Force re-render by updating state again
+      if (allStock.length === 0) {
+        console.warn('No stock items found for location:', selectedLocation)
+      }
+    } catch (error: any) {
       console.error('Error loading stock:', error)
+      console.error('Error details:', error.message, error.stack)
       setStockItems([])
     } finally {
       setLoading(false)

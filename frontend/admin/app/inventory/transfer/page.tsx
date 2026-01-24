@@ -165,9 +165,11 @@ export default function StockTransferPage() {
       const data = await response.json()
       if (data.success) {
         showNotification('Stock transferred successfully!', 'success')
-        // Refresh data before navigating
-        await loadData()
+        // Small delay to ensure data is saved
+        await new Promise(resolve => setTimeout(resolve, 1000))
         router.push('/inventory')
+        // Force refresh when returning to inventory page
+        router.refresh()
       } else {
         showNotification(data.error || 'Failed to transfer stock', 'error')
       }

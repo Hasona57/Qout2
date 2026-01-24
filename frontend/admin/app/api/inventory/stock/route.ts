@@ -22,9 +22,11 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Error fetching stock:', error)
+      console.error('Error details:', error.message, error.code, error.details)
       return NextResponse.json({ data: [], success: true })
     }
 
+    console.log(`Fetched ${stockData?.length || 0} stock items for locationId: ${locationId || 'all'}`)
     let stock = stockData || []
 
     // Get related data
