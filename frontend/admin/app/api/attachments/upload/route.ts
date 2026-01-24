@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
       // Continue even if DB save fails
     }
 
-    // Return URL even if DB save failed
+    // Return URL even if DB save failed - ensure format matches what frontend expects
     return NextResponse.json({
       data: {
         url: publicUrl,
@@ -111,9 +111,9 @@ export async function POST(request: NextRequest) {
         entityType,
         entityId: finalEntityId,
       },
-      url: publicUrl,
+      url: publicUrl, // Also include at root level for compatibility
       success: true,
-    })
+    }, { status: 200 })
   } catch (error: any) {
     console.error('Error in upload route:', error)
     return NextResponse.json(
