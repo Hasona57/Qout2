@@ -19,10 +19,11 @@ export async function GET(request: NextRequest) {
 
     // Get related data
     if (transfers && transfers.length > 0) {
-      const locationIds = [...new Set([
+      const allLocationIds = [
         ...transfers.map((t: any) => t.fromLocationId),
         ...transfers.map((t: any) => t.toLocationId),
-      ]).filter(Boolean)]
+      ].filter(Boolean)
+      const locationIds = [...new Set(allLocationIds)]
 
       const { data: locations } = locationIds.length > 0 ? await supabase
         .from('stock_locations')
