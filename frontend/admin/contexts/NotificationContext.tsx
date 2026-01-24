@@ -79,22 +79,30 @@ function ToastInner({ id, message, type, onClose }: { id: string; message: strin
         setTimeout(() => onClose(id), 300)
     }
 
-    const bgColors: Record<ToastType, string> = {
-        success: 'bg-green-50 border-green-200 text-green-800',
-        error: 'bg-red-50 border-red-200 text-red-800',
-        info: 'bg-blue-50 border-blue-200 text-blue-800',
-        warning: 'bg-yellow-50 border-yellow-200 text-yellow-800',
+    // Helper function to get background color with type safety
+    const getBgColor = (toastType: ToastType): string => {
+        const colors: Record<ToastType, string> = {
+            success: 'bg-green-50 border-green-200 text-green-800',
+            error: 'bg-red-50 border-red-200 text-red-800',
+            info: 'bg-blue-50 border-blue-200 text-blue-800',
+            warning: 'bg-yellow-50 border-yellow-200 text-yellow-800',
+        }
+        return colors[toastType]
     }
 
-    const icons: Record<ToastType, string> = {
-        success: '✅',
-        error: '❌',
-        info: 'ℹ️',
-        warning: '⚠️',
+    // Helper function to get icon with type safety
+    const getIcon = (toastType: ToastType): string => {
+        const iconMap: Record<ToastType, string> = {
+            success: '✅',
+            error: '❌',
+            info: 'ℹ️',
+            warning: '⚠️',
+        }
+        return iconMap[toastType]
     }
 
-    const bgColor = bgColors[type] || bgColors.info
-    const icon = icons[type] || icons.info
+    const bgColor = getBgColor(type)
+    const icon = getIcon(type)
 
     return (
         <div
