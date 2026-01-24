@@ -72,9 +72,11 @@ export default function InventoryPage() {
     try {
       const response = await fetchWithAuth(`/inventory/stock?locationId=${selectedLocation}`)
       const data = await response.json()
-      // Filter to show only items with quantity > 0 for better UX
-      const availableStock = (data.data || []).filter((item: any) => parseFloat(String(item.quantity || 0)) > 0)
-      setStockItems(availableStock)
+      console.log('Stock data received:', data.data?.length, 'items for location:', selectedLocation)
+      // Show all items (including 0 quantity) so admin can see what's assigned
+      const allStock = data.data || []
+      setStockItems(allStock)
+      console.log('Stock items set:', allStock.length)
     } catch (error) {
       console.error('Error loading stock:', error)
       setStockItems([])

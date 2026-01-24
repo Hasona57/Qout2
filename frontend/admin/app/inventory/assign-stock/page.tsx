@@ -84,6 +84,8 @@ export default function AssignStockPage() {
 
       if (response.ok) {
         alert('Stock assigned successfully!')
+        // Small delay to ensure data is saved
+        await new Promise(resolve => setTimeout(resolve, 500))
         router.push('/inventory')
       }
     } catch (error) {
