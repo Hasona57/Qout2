@@ -207,23 +207,22 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = await params
     const supabase = getSupabaseServer()
 
     // Delete product images first (cascade should handle this, but let's be explicit)
     await supabase
       .from('product_images')
       .delete()
-      .eq('productId', id)
+      .eq('productId', params.id)
 
     // Delete product variants
     await supabase
       .from('product_variants')
       .delete()
-      .eq('productId', id)
+      .eq('productId', params.id)
 
     // Delete product
     const { error } = await supabase
