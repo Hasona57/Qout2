@@ -3,9 +3,10 @@ import { getSupabaseServer } from '@/lib/supabase'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const supabase = getSupabaseServer()
     const body = await request.json()
 
@@ -32,7 +33,7 @@ export async function POST(
     const { data: product, error: productError } = await supabase
       .from('products')
       .select('id, costPrice, retailPrice')
-      .eq('id', params.id)
+      .eq('id', id)
       .single()
 
     if (productError || !product) {
@@ -46,7 +47,7 @@ export async function POST(
     const { data: existingVariants, error: checkError } = await supabase
       .from('product_variants')
       .select('id')
-      .eq('productId', params.id)
+      .eq('productId', id)
       .eq('sizeId', sizeId)
       .eq('colorId', colorId)
 
@@ -63,19 +64,32 @@ export async function POST(
     }
 
     // Create variant
+    const variantData: any = {
+      productId: id,
+      sizeId,
+      colorId,
+      sku,
+      weight: weight ? parseFloat(String(weight)) : 0.5,
+      barcode: barcode || null,
+      isActive: isActive !== false,
+    }
+
+    // Handle costPrice and retailPrice
+    if (costPrice !== undefined && costPrice !== null && costPrice !== '') {
+      variantData.costPrice = parseFloat(String(costPrice))
+    } else if (product.costPrice) {
+      variantData.costPrice = parseFloat(String(product.costPrice))
+    }
+
+    if (retailPrice !== undefined && retailPrice !== null && retailPrice !== '') {
+      variantData.retailPrice = parseFloat(String(retailPrice))
+    } else if (product.retailPrice) {
+      variantData.retailPrice = parseFloat(String(product.retailPrice))
+    }
+
     const { data: variant, error: variantError } = await supabase
       .from('product_variants')
-      .insert({
-        productId: params.id,
-        sizeId,
-        colorId,
-        sku,
-        weight: parseFloat(weight || '0.5'),
-        barcode: barcode || null,
-        costPrice: costPrice !== undefined ? parseFloat(costPrice) : product.costPrice,
-        retailPrice: retailPrice !== undefined ? parseFloat(retailPrice) : product.retailPrice,
-        isActive: isActive !== false,
-      })
+      .insert(variantData)
       .select()
       .single()
 

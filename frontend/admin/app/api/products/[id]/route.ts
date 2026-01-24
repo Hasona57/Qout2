@@ -3,16 +3,17 @@ import { getSupabaseServer } from '@/lib/supabase'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const supabase = getSupabaseServer()
 
     // Get product first
     const { data: product, error } = await supabase
       .from('products')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .single()
 
     if (error || !product) {
@@ -76,9 +77,10 @@ export async function GET(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const supabase = getSupabaseServer()
     const body = await request.json()
 
@@ -104,8 +106,12 @@ export async function PATCH(
     if (descriptionEn !== undefined) updateData.descriptionEn = descriptionEn
     if (sku !== undefined) updateData.sku = sku
     if (categoryId !== undefined) updateData.categoryId = categoryId
-    if (costPrice !== undefined) updateData.costPrice = parseFloat(costPrice)
-    if (retailPrice !== undefined) updateData.retailPrice = parseFloat(retailPrice)
+    if (costPrice !== undefined && costPrice !== null && costPrice !== '') {
+      updateData.costPrice = parseFloat(String(costPrice))
+    }
+    if (retailPrice !== undefined && retailPrice !== null && retailPrice !== '') {
+      updateData.retailPrice = parseFloat(String(retailPrice))
+    }
     if (isActive !== undefined) updateData.isActive = isActive
     if (isFeatured !== undefined) updateData.isFeatured = isFeatured
 
@@ -116,7 +122,7 @@ export async function PATCH(
       const { data: updatedProduct, error: productError } = await supabase
         .from('products')
         .update(updateData)
-        .eq('id', params.id)
+        .eq('id', id)
         .select()
         .single()
 
@@ -133,7 +139,7 @@ export async function PATCH(
       const { data: existingProduct, error: fetchError } = await supabase
         .from('products')
         .select('*')
-        .eq('id', params.id)
+        .eq('id', id)
         .single()
 
       if (fetchError) {
@@ -152,12 +158,12 @@ export async function PATCH(
       await supabase
         .from('product_images')
         .delete()
-        .eq('productId', params.id)
+        .eq('productId', id)
 
       // Insert new images
       if (images.length > 0) {
         const imageRecords = images.map((img: any, index: number) => ({
-          productId: params.id,
+          productId: id,
           url: typeof img === 'string' ? img : img.url,
           altTextAr: typeof img === 'object' ? img.altTextAr : null,
           altTextEn: typeof img === 'object' ? img.altTextEn : null,
@@ -188,28 +194,29 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const supabase = getSupabaseServer()
 
     // Delete product images first (cascade should handle this, but let's be explicit)
     await supabase
       .from('product_images')
       .delete()
-      .eq('productId', params.id)
+      .eq('productId', id)
 
     // Delete product variants
     await supabase
       .from('product_variants')
       .delete()
-      .eq('productId', params.id)
+      .eq('productId', id)
 
     // Delete product
     const { error } = await supabase
       .from('products')
       .delete()
-      .eq('id', params.id)
+      .eq('id', id)
 
     if (error) {
       console.error('Error deleting product:', error)
