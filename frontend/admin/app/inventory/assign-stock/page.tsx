@@ -37,10 +37,16 @@ export default function AssignStockPage() {
       const productsData = await productsRes.json()
       const locationsData = await locationsRes.json()
       setProducts(productsData.data || [])
-      const validLocations = (locationsData.data || []).filter((loc: any) => loc.name !== 'Factory')
-      setLocations(validLocations)
-      if (validLocations.length > 0) {
-        setFormData({ ...formData, locationId: validLocations[0].id })
+      // Include all locations including Warehouse and Factory
+      const allLocations = locationsData.data || []
+      setLocations(allLocations)
+      if (allLocations.length > 0) {
+        // Prefer Warehouse if exists, otherwise use first location
+        const warehouse = allLocations.find((loc: any) => 
+          loc.name?.toLowerCase().includes('warehouse') || 
+          loc.name?.toLowerCase().includes('مستودع')
+        )
+        setFormData({ ...formData, locationId: warehouse?.id || allLocations[0].id })
       }
     } catch (error) {
       console.error('Error loading data:', error)

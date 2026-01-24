@@ -9,14 +9,16 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseServer()
 
-    // Build date filter
+    // Get invoices first
     let invoiceQuery = supabase
       .from('invoices')
-      .select('*, items:invoice_items(*)')
+      .select('*')
+      .eq('status', 'paid')
     
     let orderQuery = supabase
       .from('orders')
-      .select('*, items:order_items(*)')
+      .select('*')
+      .in('status', ['pending', 'processing', 'confirmed', 'shipped', 'delivered'])
 
     if (startDate) {
       invoiceQuery = invoiceQuery.gte('createdAt', startDate)
@@ -29,19 +31,68 @@ export async function GET(request: NextRequest) {
     }
 
     const [invoicesResult, ordersResult] = await Promise.all([
-      invoiceQuery.eq('status', 'paid'),
-      orderQuery.in('status', ['pending', 'processing', 'confirmed', 'shipped', 'delivered'])
+      invoiceQuery,
+      orderQuery,
     ])
+
+    // Handle errors gracefully
+    let invoices: any[] = []
+    let orders: any[] = []
 
     if (invoicesResult.error) {
       console.error('Error fetching invoices:', invoicesResult.error)
-    }
-    if (ordersResult.error) {
-      console.error('Error fetching orders:', ordersResult.error)
+    } else {
+      invoices = invoicesResult.data || []
     }
 
-    const invoices = invoicesResult.data || []
-    const orders = ordersResult.data || []
+    if (ordersResult.error) {
+      console.error('Error fetching orders:', ordersResult.error)
+    } else {
+      orders = ordersResult.data || []
+    }
+
+    // Get invoice items and order items
+    if (invoices.length > 0) {
+      const invoiceIds = invoices.map((inv: any) => inv.id)
+      const { data: invoiceItems } = await supabase
+        .from('invoice_items')
+        .select('*')
+        .in('invoiceId', invoiceIds)
+      
+      const itemsByInvoice = new Map()
+      ;(invoiceItems || []).forEach((item: any) => {
+        if (!itemsByInvoice.has(item.invoiceId)) {
+          itemsByInvoice.set(item.invoiceId, [])
+        }
+        itemsByInvoice.get(item.invoiceId).push(item)
+      })
+      
+      invoices = invoices.map((inv: any) => ({
+        ...inv,
+        items: itemsByInvoice.get(inv.id) || [],
+      }))
+    }
+
+    if (orders.length > 0) {
+      const orderIds = orders.map((o: any) => o.id)
+      const { data: orderItems } = await supabase
+        .from('order_items')
+        .select('*')
+        .in('orderId', orderIds)
+      
+      const itemsByOrder = new Map()
+      ;(orderItems || []).forEach((item: any) => {
+        if (!itemsByOrder.has(item.orderId)) {
+          itemsByOrder.set(item.orderId, [])
+        }
+        itemsByOrder.get(item.orderId).push(item)
+      })
+      
+      orders = orders.map((order: any) => ({
+        ...order,
+        items: itemsByOrder.get(order.id) || [],
+      }))
+    }
 
     // Calculate POS totals
     const posSales = invoices.reduce((sum, inv) => {

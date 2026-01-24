@@ -11,65 +11,99 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search')
     const locationId = searchParams.get('locationId')
 
-    // Build query
-    let query = supabase
+    // Build query - get products first
+    let { data, error } = await supabase
       .from('products')
-      .select(`
-        *,
-        variants (
-          *,
-          size:sizeId (*),
-          color:colorId (*)
-        ),
-        images (*),
-        category:categoryId (*)
-      `)
-
-    if (isActive === 'true') {
-      query = query.eq('isActive', true)
-    }
-
-    if (categoryId) {
-      query = query.eq('categoryId', categoryId)
-    }
-
-    if (search) {
-      query = query.or(`nameAr.ilike.%${search}%,nameEn.ilike.%${search}%`)
-    }
-
-    const { data, error } = await query
+      .select('*')
 
     if (error) {
-      console.error('Supabase error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      console.error('Error fetching products:', error)
+      return NextResponse.json({ data: [], success: true })
     }
 
-    // If locationId provided, add stock information
-    if (locationId && data) {
-      const productsWithStock = await Promise.all(
-        data.map(async (product: any) => {
-          if (product.variants && product.variants.length > 0) {
-            const variantIds = product.variants.map((v: any) => v.id)
-            const { data: stockData } = await supabase
-              .from('stock_items')
-              .select('variantId, quantity')
-              .eq('locationId', locationId)
-              .in('variantId', variantIds)
-
-            const stockMap = new Map(stockData?.map((s: any) => [s.variantId, s.quantity]) || [])
-
-            product.variants = product.variants.map((variant: any) => ({
-              ...variant,
-              stockQuantity: stockMap.get(variant.id) || 0,
-            }))
-          }
-          return product
-        })
-      )
-      return NextResponse.json({ data: productsWithStock, success: true })
+    // Filter data
+    if (data) {
+      if (isActive === 'true') {
+        data = data.filter((p: any) => p.isActive === true)
+      }
+      if (categoryId) {
+        data = data.filter((p: any) => p.categoryId === categoryId)
+      }
+      if (search) {
+        const searchLower = search.toLowerCase()
+        data = data.filter((p: any) => 
+          (p.nameAr && p.nameAr.toLowerCase().includes(searchLower)) ||
+          (p.nameEn && p.nameEn.toLowerCase().includes(searchLower))
+        )
+      }
     }
 
-    return NextResponse.json({ data, success: true })
+    // Get related data
+    if (data && data.length > 0) {
+      const productIds = data.map((p: any) => p.id)
+      const categoryIds = [...new Set(data.map((p: any) => p.categoryId).filter(Boolean))]
+
+      // Get variants
+      const { data: variants } = await supabase
+        .from('product_variants')
+        .select('*')
+        .in('productId', productIds)
+
+      // Get images
+      const { data: images } = await supabase
+        .from('product_images')
+        .select('*')
+        .in('productId', productIds)
+
+      // Get categories
+      const { data: categories } = categoryIds.length > 0 ? await supabase
+        .from('categories')
+        .select('*')
+        .in('id', categoryIds) : { data: [] }
+
+      const categoryMap = new Map((categories || []).map((c: any) => [c.id, c]))
+
+      // Get sizes and colors for variants
+      const sizeIds = [...new Set((variants || []).map((v: any) => v.sizeId).filter(Boolean))]
+      const colorIds = [...new Set((variants || []).map((v: any) => v.colorId).filter(Boolean))]
+
+      const [sizesResult, colorsResult] = await Promise.all([
+        sizeIds.length > 0 ? supabase.from('sizes').select('*').in('id', sizeIds) : { data: [] },
+        colorIds.length > 0 ? supabase.from('colors').select('*').in('id', colorIds) : { data: [] },
+      ])
+
+      const sizeMap = new Map((sizesResult.data || []).map((s: any) => [s.id, s]))
+      const colorMap = new Map((colorsResult.data || []).map((c: any) => [c.id, c]))
+
+      // Get stock if locationId provided
+      let stockMap = new Map()
+      if (locationId && variants) {
+        const variantIds = variants.map((v: any) => v.id)
+        const { data: stockData } = await supabase
+          .from('stock_items')
+          .select('variantId, quantity')
+          .eq('locationId', locationId)
+          .in('variantId', variantIds)
+        stockMap = new Map((stockData || []).map((s: any) => [s.variantId, s.quantity]))
+      }
+
+      // Combine data
+      data = data.map((product: any) => ({
+        ...product,
+        category: categoryMap.get(product.categoryId) || null,
+        variants: (variants || [])
+          .filter((v: any) => v.productId === product.id)
+          .map((v: any) => ({
+            ...v,
+            size: sizeMap.get(v.sizeId) || null,
+            color: colorMap.get(v.colorId) || null,
+            stockQuantity: stockMap.get(v.id) || 0,
+          })),
+        images: (images || []).filter((img: any) => img.productId === product.id),
+      }))
+    }
+
+    return NextResponse.json({ data: data || [], success: true })
   } catch (error: any) {
     console.error('API error:', error)
     return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })

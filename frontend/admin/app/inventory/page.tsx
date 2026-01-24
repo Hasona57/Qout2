@@ -55,12 +55,20 @@ export default function InventoryPage() {
       <div>
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-gray-900">Inventory Management</h1>
-          <Link
-            href="/inventory/assign-stock"
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
-          >
-            + Assign Stock
-          </Link>
+          <div className="flex gap-3">
+            <Link
+              href="/inventory/transfer"
+              className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold"
+            >
+              Transfer Stock
+            </Link>
+            <Link
+              href="/inventory/assign-stock"
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
+            >
+              + Assign Stock
+            </Link>
+          </div>
         </div>
 
         <div className="mb-6">

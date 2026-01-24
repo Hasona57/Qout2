@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Error fetching expenses:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ data: [], success: true })
     }
 
     return NextResponse.json({ data: expenses || [], success: true })
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Error creating expense:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: error.message, success: false }, { status: 500 })
     }
 
     return NextResponse.json({ data: expense, success: true })

@@ -11,6 +11,22 @@ export default function SafePage() {
     const [dateRange, setDateRange] = useState<'all' | 'today' | 'week' | 'month' | 'last7' | 'last30' | 'custom'>('all')
     const [startDate, setStartDate] = useState<string>('')
     const [endDate, setEndDate] = useState<string>('')
+    const [showTransferModal, setShowTransferModal] = useState(false)
+    const [transferForm, setTransferForm] = useState({
+        fromMethod: '',
+        toMethod: '',
+        amount: '',
+        notes: '',
+    })
+    const [transferring, setTransferring] = useState(false)
+    const paymentMethods = [
+        { code: 'cash', name: 'نقد', nameEn: 'Cash' },
+        { code: 'cash_pos', name: 'نقد نقاط البيع', nameEn: 'Cash POS' },
+        { code: 'cod', name: 'الدفع عند الاستلام', nameEn: 'Cash on Delivery' },
+        { code: 'vodafone_cash', name: 'فودافون كاش', nameEn: 'Vodafone Cash' },
+        { code: 'instapay', name: 'انستا باي', nameEn: 'Instapay' },
+        { code: 'fawry', name: 'فوري', nameEn: 'Fawry' },
+    ]
 
     useEffect(() => {
         fetchSafeStatus()
@@ -85,12 +101,20 @@ export default function SafePage() {
             <div className="p-3 sm:p-4 lg:p-8 max-w-7xl mx-auto">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 sm:mb-6 lg:mb-8">
                     <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">الخزينة والمالية</h1>
-                    <Link
-                        href="/finance"
-                        className="px-3 sm:px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg border border-gray-300 transition text-sm sm:text-base w-full sm:w-auto text-center"
-                    >
-                        العودة للمالية
-                    </Link>
+                    <div className="flex gap-3 w-full sm:w-auto">
+                        <button
+                            onClick={() => setShowTransferModal(true)}
+                            className="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm sm:text-base w-full sm:w-auto text-center"
+                        >
+                            نقل أموال
+                        </button>
+                        <Link
+                            href="/finance"
+                            className="px-3 sm:px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg border border-gray-300 transition text-sm sm:text-base w-full sm:w-auto text-center"
+                        >
+                            العودة للمالية
+                        </Link>
+                    </div>
                 </div>
 
                 {/* Date Range Selector */}
@@ -294,6 +318,132 @@ export default function SafePage() {
                 </div>
 
             </div>
+
+            {/* Money Transfer Modal */}
+            {showTransferModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+                        <h2 className="text-2xl font-bold text-gray-900 mb-6">نقل الأموال بين طرق الدفع</h2>
+                        <form onSubmit={async (e) => {
+                            e.preventDefault()
+                            if (!transferForm.fromMethod || !transferForm.toMethod || !transferForm.amount) {
+                                alert('يرجى ملء جميع الحقول')
+                                return
+                            }
+                            setTransferring(true)
+                            try {
+                                const response = await fetchWithAuth('/finance/transfer', {
+                                    method: 'POST',
+                                    body: JSON.stringify(transferForm),
+                                })
+                                const data = await response.json()
+                                if (data.success) {
+                                    alert('تم نقل الأموال بنجاح!')
+                                    setShowTransferModal(false)
+                                    setTransferForm({ fromMethod: '', toMethod: '', amount: '', notes: '' })
+                                    fetchSafeStatus()
+                                } else {
+                                    alert(data.error || 'فشل نقل الأموال')
+                                }
+                            } catch (error) {
+                                console.error('Error transferring money:', error)
+                                alert('حدث خطأ أثناء نقل الأموال')
+                            } finally {
+                                setTransferring(false)
+                            }
+                        }}>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        من طريقة الدفع *
+                                    </label>
+                                    <select
+                                        value={transferForm.fromMethod}
+                                        onChange={(e) => setTransferForm({ ...transferForm, fromMethod: e.target.value })}
+                                        required
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    >
+                                        <option value="">اختر طريقة الدفع</option>
+                                        {paymentMethods.map((method) => (
+                                            <option key={method.code} value={method.code}>
+                                                {method.name} ({method.nameEn})
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        إلى طريقة الدفع *
+                                    </label>
+                                    <select
+                                        value={transferForm.toMethod}
+                                        onChange={(e) => setTransferForm({ ...transferForm, toMethod: e.target.value })}
+                                        required
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    >
+                                        <option value="">اختر طريقة الدفع</option>
+                                        {paymentMethods
+                                            .filter(m => m.code !== transferForm.fromMethod)
+                                            .map((method) => (
+                                                <option key={method.code} value={method.code}>
+                                                    {method.name} ({method.nameEn})
+                                                </option>
+                                            ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        المبلغ *
+                                    </label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0.01"
+                                        value={transferForm.amount}
+                                        onChange={(e) => setTransferForm({ ...transferForm, amount: e.target.value })}
+                                        required
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        ملاحظات (اختياري)
+                                    </label>
+                                    <textarea
+                                        value={transferForm.notes}
+                                        onChange={(e) => setTransferForm({ ...transferForm, notes: e.target.value })}
+                                        rows={3}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+
+                                <div className="flex justify-end space-x-4 space-x-reverse pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowTransferModal(false)
+                                            setTransferForm({ fromMethod: '', toMethod: '', amount: '', notes: '' })
+                                        }}
+                                        className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50"
+                                    >
+                                        إلغاء
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={transferring}
+                                        className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                                    >
+                                        {transferring ? 'جارٍ النقل...' : 'نقل الأموال'}
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </Layout>
     )
 }
