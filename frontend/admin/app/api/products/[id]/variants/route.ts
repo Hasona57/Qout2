@@ -6,6 +6,13 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    if (!params || !params.id) {
+      return NextResponse.json(
+        { error: 'Product ID is required', success: false },
+        { status: 400 }
+      )
+    }
+
     const supabase = getSupabaseServer()
     
     let body: any = {}
@@ -145,6 +152,14 @@ export async function POST(
       variantData.weight = 0.5
     }
 
+    // Validate variantData before insert
+    if (!variantData.productId || !variantData.sizeId || !variantData.colorId || !variantData.sku) {
+      return NextResponse.json(
+        { error: 'Missing required fields: productId, sizeId, colorId, or sku', success: false },
+        { status: 400 }
+      )
+    }
+
     const { data: variant, error: variantError } = await supabase
       .from('product_variants')
       .insert(variantData)
@@ -154,12 +169,23 @@ export async function POST(
     if (variantError) {
       console.error('Error creating variant:', variantError)
       console.error('Variant data attempted:', JSON.stringify(variantData, null, 2))
+      console.error('Error code:', variantError.code)
+      console.error('Error details:', variantError.details)
+      console.error('Error hint:', variantError.hint)
+      
       return NextResponse.json(
         { 
           error: variantError.message || 'Failed to create variant', 
           success: false,
-          details: variantError.details || variantError.hint || undefined
+          details: variantError.details || variantError.hint || variantError.code || undefined
         },
+        { status: 500 }
+      )
+    }
+
+    if (!variant) {
+      return NextResponse.json(
+        { error: 'Variant created but no data returned', success: false },
         { status: 500 }
       )
     }

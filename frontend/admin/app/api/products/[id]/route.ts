@@ -79,6 +79,13 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
+    if (!params || !params.id) {
+      return NextResponse.json(
+        { error: 'Product ID is required', success: false },
+        { status: 400 }
+      )
+    }
+
     const supabase = getSupabaseServer()
     
     let body: any = {}
