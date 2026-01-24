@@ -16,9 +16,9 @@ export async function GET(request: NextRequest) {
       supabase.from('orders').select('id', { count: 'exact' }),
       supabase.from('invoices').select('id', { count: 'exact' }).eq('status', 'paid'),
       supabase
-        .from('product_variants')
+        .from('stock_items')
         .select('id')
-        .or('availableStock.lt.10,availableStock.is.null'),
+        .lt('quantity', 10),
     ])
 
     // Get recent activity (last 10 orders and invoices)

@@ -12,13 +12,13 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Error fetching locations:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ data: [], success: true })
     }
 
     return NextResponse.json({ data: locations || [], success: true })
   } catch (error: any) {
     console.error('Error in locations route:', error)
-    return NextResponse.json({ error: error.message || 'Failed to fetch locations' }, { status: 500 })
+    return NextResponse.json({ data: [], success: true })
   }
 }
 

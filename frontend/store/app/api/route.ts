@@ -1,54 +1,14 @@
-// Vercel Serverless API Routes - Main API handler
+// Vercel Serverless API Routes - Main API handler (Fallback route)
+// Note: Specific routes in subdirectories take precedence
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
 
-// This will handle all API routes and proxy to Supabase or handle business logic
+// This is a fallback route - specific routes in subdirectories should be used instead
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
-  const path = searchParams.get('path') || ''
-  
-  // Handle different API endpoints
-  if (path.startsWith('products')) {
-    return handleProducts(request)
-  }
-  
-  return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  return NextResponse.json({ error: 'Not found. Use specific API routes.', success: false }, { status: 404 })
 }
 
 export async function POST(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
-  const path = searchParams.get('path') || ''
-  
-  if (path.startsWith('auth')) {
-    return handleAuth(request)
-  }
-  
-  return NextResponse.json({ error: 'Not found' }, { status: 404 })
-}
-
-async function handleProducts(request: NextRequest) {
-  try {
-    const { data, error } = await supabase
-      .from('products')
-      .select('*, variants(*, size(*), color(*)), images(*)')
-      .eq('isActive', true)
-    
-    if (error) throw error
-    
-    return NextResponse.json({ data, success: true })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-}
-
-async function handleAuth(request: NextRequest) {
-  try {
-    const body = await request.json()
-    // Handle authentication logic
-    return NextResponse.json({ success: true })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
+  return NextResponse.json({ error: 'Not found. Use specific API routes.', success: false }, { status: 404 })
 }
 
 
