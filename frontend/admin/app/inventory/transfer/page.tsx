@@ -61,18 +61,24 @@ export default function StockTransferPage() {
       updated[index].availableQuantity = undefined
     }
     if (field === 'variantId' && value && formData.fromLocationId) {
-      // Fetch available stock for this variant at source location
-      try {
-        const stockRes = await fetchWithAuth(`/inventory/stock?locationId=${formData.fromLocationId}`)
-        const stockData = await stockRes.json()
-        const stockItems = stockData.data || []
-        const variantStock = stockItems.find((s: any) => s.variantId === value)
-        const availableQty = variantStock ? parseFloat(String(variantStock.quantity || 0)) : 0
-        updated[index].availableQuantity = availableQty
-        setAvailableStock(new Map(availableStock.set(value, availableQty)))
-      } catch (error) {
-        console.error('Error fetching available stock:', error)
-        updated[index].availableQuantity = 0
+      // Use available stock from map if already loaded, otherwise fetch
+      const existingQty = availableStock.get(value)
+      if (existingQty !== undefined) {
+        updated[index].availableQuantity = existingQty
+      } else {
+        // Fetch available stock for this variant at source location
+        try {
+          const stockRes = await fetchWithAuth(`/inventory/stock?locationId=${formData.fromLocationId}`)
+          const stockData = await stockRes.json()
+          const stockItems = stockData.data || []
+          const variantStock = stockItems.find((s: any) => s.variantId === value)
+          const availableQty = variantStock ? parseFloat(String(variantStock.quantity || 0)) : 0
+          updated[index].availableQuantity = availableQty
+          setAvailableStock(prev => new Map(prev.set(value, availableQty)))
+        } catch (error) {
+          console.error('Error fetching available stock:', error)
+          updated[index].availableQuantity = 0
+        }
       }
     }
     setTransferItems(updated)
