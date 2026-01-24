@@ -68,7 +68,16 @@ export async function GET(
 
     return NextResponse.json({ data: productWithDetails, success: true })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('Error in GET product route:', error)
+    console.error('Error stack:', error.stack)
+    return NextResponse.json(
+      { 
+        error: error.message || 'Failed to fetch product', 
+        success: false,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      },
+      { status: 500 }
+    )
   }
 }
 
