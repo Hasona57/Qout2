@@ -167,17 +167,6 @@ export async function POST(request: NextRequest) {
 
     console.log('Product data to insert:', JSON.stringify(productData, null, 2))
 
-    // Check if products table exists
-    const { data: tableCheck, error: tableError } = await supabase
-      .rpc('exec_sql', { 
-        sql: `SELECT EXISTS (
-          SELECT FROM information_schema.tables 
-          WHERE table_schema = 'public' 
-          AND table_name = 'products'
-        )` 
-      })
-      .catch(() => ({ data: null, error: null }))
-    
     // Try to create product
     const { data: product, error: productError } = await supabase
       .from('products')
@@ -191,6 +180,25 @@ export async function POST(request: NextRequest) {
       console.error('Error details:', productError.details)
       console.error('Error hint:', productError.hint)
       console.error('Error message:', productError.message)
+      
+      // Check if it's an RLS error
+      if (productError.code === '42501' || productError.message?.includes('permission denied') || productError.message?.includes('row-level security')) {
+        console.error('RLS Policy Error - Service role may not have proper permissions')
+        return NextResponse.json(
+          { 
+            error: 'Permission denied. Please check RLS policies for products table.', 
+            success: false,
+            details: process.env.NODE_ENV === 'development' ? {
+              code: productError.code,
+              details: productError.details,
+              hint: productError.hint,
+              message: 'Make sure to run enable_rls.sql in Supabase SQL Editor'
+            } : undefined
+          },
+          { status: 403 }
+        )
+      }
+      
       return NextResponse.json(
         { 
           error: productError.message || 'Failed to create product', 
@@ -198,7 +206,8 @@ export async function POST(request: NextRequest) {
           details: process.env.NODE_ENV === 'development' ? {
             code: productError.code,
             details: productError.details,
-            hint: productError.hint
+            hint: productError.hint,
+            productData: productData
           } : undefined
         },
         { status: 500 }
