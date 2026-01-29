@@ -8,7 +8,15 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this'
 export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json()
+    
+    if (!email || !password) {
+      return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
+    }
+    
     const supabase = getSupabaseServer()
+
+    console.log('=== POS LOGIN DEBUG ===')
+    console.log('Email:', email)
 
     // Find user first
     const { data: user, error } = await supabase
@@ -18,9 +26,16 @@ export async function POST(request: NextRequest) {
       .eq('isActive', true)
       .single()
 
+    if (error) {
+      console.error('Error finding user:', error)
+    }
+
     if (error || !user) {
+      console.log('User not found or inactive')
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
+
+    console.log('User found:', user.id, user.email)
 
     // Get role
     const { data: role } = user.roleId ? await supabase
@@ -30,8 +45,12 @@ export async function POST(request: NextRequest) {
       .single() : { data: null }
 
     // Verify password
+    console.log('Comparing password...')
     const isValid = await bcrypt.compare(password, user.password)
+    console.log('Password valid:', isValid)
+    
     if (!isValid) {
+      console.log('Invalid password')
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
 

@@ -284,9 +284,9 @@ BEGIN
       password = EXCLUDED.password,
       "roleId" = EXCLUDED."roleId",
       "isActive" = true', 
-    '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', -- admin123
+    '$2b$10$IGpMpJedxL2/ewHHYXXEV.qSpDj6b.Szp.rjhYInM7oPbXlpFFuPy', -- admin123
     v_admin_role_id,
-    '$2b$10$rOzJqZqZqZqZqZqZqZqZqOZqZqZqZqZqZqZqZqZqZqZqZqZqZqZqZq', -- pos123
+    '$2b$10$0WaGdu9ieYIYCu3AsCZLQO3i1scYye2jaAXFRm91oDw/gEvzvCMKi', -- pos123
     v_sales_role_id);
 END $$;
 
