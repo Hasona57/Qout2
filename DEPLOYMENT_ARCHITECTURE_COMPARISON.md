@@ -178,3 +178,4 @@
 
 **لا تحتاج NestJS Backend منفصل** إلا إذا كنت تحتاج ميزات محددة جداً (WebSockets, Long jobs, etc.)
 
+

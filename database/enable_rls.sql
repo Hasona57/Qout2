@@ -99,3 +99,4 @@ CREATE POLICY IF NOT EXISTS "Service role full access for permissions" ON public
 -- For production, you may want to add more restrictive policies based on user roles
 -- The service role key bypasses RLS, but having policies helps with documentation and future changes
 
+

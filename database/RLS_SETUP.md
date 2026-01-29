@@ -119,3 +119,4 @@ After enabling RLS:
 3. Review and customize policies based on your needs
 4. Add user-specific policies for sensitive data
 
+
