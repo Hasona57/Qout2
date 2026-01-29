@@ -351,12 +351,14 @@ BEGIN
   (gen_random_uuid(), 'CASHMERE', 'كشميري', 'Cashmere', '#E6D5B8', 30, NOW(), NOW()),
   (gen_random_uuid(), 'MAUVE', 'موف', 'Mauve', '#E0B0FF', 31, NOW(), NOW()),
   (gen_random_uuid(), 'ROSE', 'روز', 'Rose', '#FF007F', 32, NOW(), NOW()),
-  (gen_random_uuid(), 'TURQUOISE', 'تركواز', 'Turquoise', '#40E0D0', 33, NOW(), NOW())
-ON CONFLICT (code) DO UPDATE SET
-  "nameAr" = EXCLUDED."nameAr",
-  "nameEn" = EXCLUDED."nameEn",
-  "hexCode" = EXCLUDED."hexCode",
-  "sortOrder" = EXCLUDED."sortOrder";
+      (gen_random_uuid(), 'TURQUOISE', 'تركواز', 'Turquoise', '#40E0D0', 33, NOW(), NOW())
+    ON CONFLICT (code) DO UPDATE SET
+      "nameAr" = EXCLUDED."nameAr",
+      "nameEn" = EXCLUDED."nameEn",
+      "hexCode" = EXCLUDED."hexCode",
+      "sortOrder" = EXCLUDED."sortOrder";
+  END IF;
+END $$;
 
 -- 2.6 Categories (الفئات)
 DO $$
