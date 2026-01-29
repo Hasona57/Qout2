@@ -252,37 +252,42 @@ BEGIN
 
   -- كلمات المرور: admin123 و pos123
   -- Hashes تم توليدها باستخدام: bcrypt.hash('admin123', 10) و bcrypt.hash('pos123', 10)
+  -- استخدام format مع تمرير bcrypt hashes كمعاملات لتجنب مشكلة $ في format
   EXECUTE format('
     INSERT INTO users (id, name, email, password, "roleId", "isActive", "employeeCode", "commissionRate", "createdAt", "updatedAt")
-  VALUES
-    (
-      gen_random_uuid(), 
-      'Admin User', 
-      'admin@qote.com', 
-      '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', -- admin123
-      v_admin_role_id, 
-      true,
-      NULL,
-      NULL,
-      NOW(), 
-      NOW()
-    ),
-    (
-      gen_random_uuid(), 
-      'POS Sales Employee', 
-      'pos@qote.com', 
-      ''$2b$10$rOzJqZqZqZqZqZqZqZqZqOZqZqZqZqZqZqZqZqZqZqZqZqZqZqZqZq'',
-      %L, 
-      true,
-      ''POS001'',
-      ''5.00'',
-      NOW(), 
-      NOW()
-    )
+    VALUES
+      (
+        gen_random_uuid(), 
+        ''Admin User'', 
+        ''admin@qote.com'', 
+        %L,
+        %L, 
+        true,
+        NULL,
+        NULL,
+        NOW(), 
+        NOW()
+      ),
+      (
+        gen_random_uuid(), 
+        ''POS Sales Employee'', 
+        ''pos@qote.com'', 
+        %L,
+        %L, 
+        true,
+        ''POS001'',
+        ''5.00'',
+        NOW(), 
+        NOW()
+      )
     ON CONFLICT (email) DO UPDATE SET
       password = EXCLUDED.password,
       "roleId" = EXCLUDED."roleId",
-      "isActive" = true', v_admin_role_id, v_sales_role_id);
+      "isActive" = true', 
+    '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', -- admin123
+    v_admin_role_id,
+    '$2b$10$rOzJqZqZqZqZqZqZqZqZqOZqZqZqZqZqZqZqZqZqZqZqZqZqZqZqZq', -- pos123
+    v_sales_role_id);
 END $$;
 
 -- 2.4 Sizes (المقاسات)
