@@ -167,7 +167,18 @@ export async function POST(request: NextRequest) {
 
     console.log('Product data to insert:', JSON.stringify(productData, null, 2))
 
-    // Create product
+    // Check if products table exists
+    const { data: tableCheck, error: tableError } = await supabase
+      .rpc('exec_sql', { 
+        sql: `SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'products'
+        )` 
+      })
+      .catch(() => ({ data: null, error: null }))
+    
+    // Try to create product
     const { data: product, error: productError } = await supabase
       .from('products')
       .insert(productData)
