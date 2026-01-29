@@ -164,7 +164,7 @@ BEGIN
       gen_random_uuid(), 
       'POS Sales Employee', 
       'pos@qote.com', 
-      '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', -- pos123 (نفس hash للاختبار)
+      '$2b$10$rOzJqZqZqZqZqZqZqZqZqOZqZqZqZqZqZqZqZqZqZqZqZqZqZqZqZq', -- pos123
       v_sales_role_id, 
       true,
       'POS001',
