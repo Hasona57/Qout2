@@ -146,19 +146,24 @@ END $$;
 -- ============================================
 
 -- 2.1 Permissions (الصلاحيات)
-INSERT INTO permissions (id, name, resource, action, "createdAt", "updatedAt")
-VALUES
-  (gen_random_uuid(), 'products.create', 'products', 'create', NOW(), NOW()),
-  (gen_random_uuid(), 'products.read', 'products', 'read', NOW(), NOW()),
-  (gen_random_uuid(), 'products.update', 'products', 'update', NOW(), NOW()),
-  (gen_random_uuid(), 'products.delete', 'products', 'delete', NOW(), NOW()),
-  (gen_random_uuid(), 'inventory.view', 'inventory', 'view', NOW(), NOW()),
-  (gen_random_uuid(), 'inventory.manage', 'inventory', 'manage', NOW(), NOW()),
-  (gen_random_uuid(), 'sales.pos', 'sales', 'pos', NOW(), NOW()),
-  (gen_random_uuid(), 'sales.view', 'sales', 'view', NOW(), NOW()),
-  (gen_random_uuid(), 'production.manage', 'production', 'manage', NOW(), NOW()),
-  (gen_random_uuid(), 'reports.view', 'reports', 'view', NOW(), NOW())
-ON CONFLICT DO NOTHING;
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'permissions') THEN
+    INSERT INTO permissions (id, name, resource, action, "createdAt", "updatedAt")
+    VALUES
+      (gen_random_uuid(), 'products.create', 'products', 'create', NOW(), NOW()),
+      (gen_random_uuid(), 'products.read', 'products', 'read', NOW(), NOW()),
+      (gen_random_uuid(), 'products.update', 'products', 'update', NOW(), NOW()),
+      (gen_random_uuid(), 'products.delete', 'products', 'delete', NOW(), NOW()),
+      (gen_random_uuid(), 'inventory.view', 'inventory', 'view', NOW(), NOW()),
+      (gen_random_uuid(), 'inventory.manage', 'inventory', 'manage', NOW(), NOW()),
+      (gen_random_uuid(), 'sales.pos', 'sales', 'pos', NOW(), NOW()),
+      (gen_random_uuid(), 'sales.view', 'sales', 'view', NOW(), NOW()),
+      (gen_random_uuid(), 'production.manage', 'production', 'manage', NOW(), NOW()),
+      (gen_random_uuid(), 'reports.view', 'reports', 'view', NOW(), NOW())
+    ON CONFLICT DO NOTHING;
+  END IF;
+END $$;
 
 -- 2.2 Roles (الأدوار)
 DO $$
@@ -188,40 +193,52 @@ BEGIN
   SELECT id INTO v_storekeeper_role_id FROM roles WHERE name = 'storekeeper';
   SELECT id INTO v_customer_role_id FROM roles WHERE name = 'customer';
 
-  -- ربط الصلاحيات بالأدوار
-  -- Admin: جميع الصلاحيات
-  FOR v_perm_id IN SELECT id FROM permissions LOOP
-    INSERT INTO role_permissions ("roleId", "permissionId")
-    VALUES (v_admin_role_id, v_perm_id)
-    ON CONFLICT DO NOTHING;
-  END LOOP;
+  -- ربط الصلاحيات بالأدوار (فقط إذا كان جدول permissions موجود)
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'permissions') THEN
+    -- Admin: جميع الصلاحيات
+    FOR v_perm_id IN SELECT id FROM permissions LOOP
+      IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'role_permissions') THEN
+        INSERT INTO role_permissions ("roleId", "permissionId")
+        VALUES (v_admin_role_id, v_perm_id)
+        ON CONFLICT DO NOTHING;
+      END IF;
+    END LOOP;
 
-  -- Sales Employee: sales و products.read
-  FOR v_perm_id IN SELECT id FROM permissions WHERE name LIKE 'sales%' OR name = 'products.read' LOOP
-    INSERT INTO role_permissions ("roleId", "permissionId")
-    VALUES (v_sales_role_id, v_perm_id)
-    ON CONFLICT DO NOTHING;
-  END LOOP;
+    -- Sales Employee: sales و products.read
+    FOR v_perm_id IN SELECT id FROM permissions WHERE name LIKE 'sales%' OR name = 'products.read' LOOP
+      IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'role_permissions') THEN
+        INSERT INTO role_permissions ("roleId", "permissionId")
+        VALUES (v_sales_role_id, v_perm_id)
+        ON CONFLICT DO NOTHING;
+      END IF;
+    END LOOP;
 
-  -- Factory Manager: production و inventory
-  FOR v_perm_id IN SELECT id FROM permissions WHERE name LIKE 'production%' OR name LIKE 'inventory%' LOOP
-    INSERT INTO role_permissions ("roleId", "permissionId")
-    VALUES (v_factory_role_id, v_perm_id)
-    ON CONFLICT DO NOTHING;
-  END LOOP;
+    -- Factory Manager: production و inventory
+    FOR v_perm_id IN SELECT id FROM permissions WHERE name LIKE 'production%' OR name LIKE 'inventory%' LOOP
+      IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'role_permissions') THEN
+        INSERT INTO role_permissions ("roleId", "permissionId")
+        VALUES (v_factory_role_id, v_perm_id)
+        ON CONFLICT DO NOTHING;
+      END IF;
+    END LOOP;
 
-  -- Storekeeper: inventory و products.read
-  FOR v_perm_id IN SELECT id FROM permissions WHERE name LIKE 'inventory%' OR name = 'products.read' LOOP
-    INSERT INTO role_permissions ("roleId", "permissionId")
-    VALUES (v_storekeeper_role_id, v_perm_id)
-    ON CONFLICT DO NOTHING;
-  END LOOP;
+    -- Storekeeper: inventory و products.read
+    FOR v_perm_id IN SELECT id FROM permissions WHERE name LIKE 'inventory%' OR name = 'products.read' LOOP
+      IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'role_permissions') THEN
+        INSERT INTO role_permissions ("roleId", "permissionId")
+        VALUES (v_storekeeper_role_id, v_perm_id)
+        ON CONFLICT DO NOTHING;
+      END IF;
+    END LOOP;
 
-  -- Customer: products.read فقط
-  SELECT id INTO v_perm_id FROM permissions WHERE name = 'products.read';
-  INSERT INTO role_permissions ("roleId", "permissionId")
-  VALUES (v_customer_role_id, v_perm_id)
-  ON CONFLICT DO NOTHING;
+    -- Customer: products.read فقط
+    SELECT id INTO v_perm_id FROM permissions WHERE name = 'products.read';
+    IF v_perm_id IS NOT NULL AND EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'role_permissions') THEN
+      INSERT INTO role_permissions ("roleId", "permissionId")
+      VALUES (v_customer_role_id, v_perm_id)
+      ON CONFLICT DO NOTHING;
+    END IF;
+  END IF;
 END $$;
 
 -- 2.3 Users (المستخدمين)
@@ -232,6 +249,16 @@ DECLARE
   v_admin_role_id UUID;
   v_sales_role_id UUID;
 BEGIN
+  -- التحقق من وجود جدول users
+  IF NOT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users') THEN
+    RETURN;
+  END IF;
+  
+  -- التحقق من وجود جدول roles
+  IF NOT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'roles') THEN
+    RETURN;
+  END IF;
+  
   SELECT id INTO v_admin_role_id FROM roles WHERE name = 'admin';
   SELECT id INTO v_sales_role_id FROM roles WHERE name = 'sales_employee';
 
@@ -270,20 +297,28 @@ BEGIN
 END $$;
 
 -- 2.4 Sizes (المقاسات)
-INSERT INTO sizes (id, code, "nameAr", "nameEn", "sortOrder", "isActive", "createdAt", "updatedAt")
-VALUES
-  (gen_random_uuid(), '1', '1', '1', 1, true, NOW(), NOW()),
-  (gen_random_uuid(), '2', '2', '2', 2, true, NOW(), NOW()),
-  (gen_random_uuid(), 'FREE_SIZE', 'مقاس حر', 'Free Size', 3, true, NOW(), NOW())
-ON CONFLICT (code) DO UPDATE SET
-  "nameAr" = EXCLUDED."nameAr",
-  "nameEn" = EXCLUDED."nameEn",
-  "sortOrder" = EXCLUDED."sortOrder",
-  "isActive" = true;
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'sizes') THEN
+    INSERT INTO sizes (id, code, "nameAr", "nameEn", "sortOrder", "isActive", "createdAt", "updatedAt")
+    VALUES
+      (gen_random_uuid(), '1', '1', '1', 1, true, NOW(), NOW()),
+      (gen_random_uuid(), '2', '2', '2', 2, true, NOW(), NOW()),
+      (gen_random_uuid(), 'FREE_SIZE', 'مقاس حر', 'Free Size', 3, true, NOW(), NOW())
+    ON CONFLICT (code) DO UPDATE SET
+      "nameAr" = EXCLUDED."nameAr",
+      "nameEn" = EXCLUDED."nameEn",
+      "sortOrder" = EXCLUDED."sortOrder",
+      "isActive" = true;
+  END IF;
+END $$;
 
 -- 2.5 Colors (الألوان)
-INSERT INTO colors (id, code, "nameAr", "nameEn", "hexCode", "sortOrder", "createdAt", "updatedAt")
-VALUES
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'colors') THEN
+    INSERT INTO colors (id, code, "nameAr", "nameEn", "hexCode", "sortOrder", "createdAt", "updatedAt")
+    VALUES
   (gen_random_uuid(), 'BLACK', 'أسود', 'Black', '#000000', 1, NOW(), NOW()),
   (gen_random_uuid(), 'WHITE', 'أبيض', 'White', '#FFFFFF', 2, NOW(), NOW()),
   (gen_random_uuid(), 'OFF_WHITE', 'اوف وايت', 'Off White', '#FAF9F6', 3, NOW(), NOW()),
@@ -324,37 +359,52 @@ ON CONFLICT (code) DO UPDATE SET
   "sortOrder" = EXCLUDED."sortOrder";
 
 -- 2.6 Categories (الفئات)
-INSERT INTO categories (id, "nameAr", "nameEn", "sortOrder", "createdAt", "updatedAt")
-SELECT gen_random_uuid(), 'عبايات', 'Abayas', 1, NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM categories WHERE "nameEn" = 'Abayas')
-UNION ALL
-SELECT gen_random_uuid(), 'جاكيتات', 'Jackets', 2, NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM categories WHERE "nameEn" = 'Jackets')
-UNION ALL
-SELECT gen_random_uuid(), 'فساتين', 'Dresses', 3, NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM categories WHERE "nameEn" = 'Dresses');
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'categories') THEN
+    INSERT INTO categories (id, "nameAr", "nameEn", "sortOrder", "createdAt", "updatedAt")
+    SELECT gen_random_uuid(), 'عبايات', 'Abayas', 1, NOW(), NOW()
+    WHERE NOT EXISTS (SELECT 1 FROM categories WHERE "nameEn" = 'Abayas')
+    UNION ALL
+    SELECT gen_random_uuid(), 'جاكيتات', 'Jackets', 2, NOW(), NOW()
+    WHERE NOT EXISTS (SELECT 1 FROM categories WHERE "nameEn" = 'Jackets')
+    UNION ALL
+    SELECT gen_random_uuid(), 'فساتين', 'Dresses', 3, NOW(), NOW()
+    WHERE NOT EXISTS (SELECT 1 FROM categories WHERE "nameEn" = 'Dresses');
+  END IF;
+END $$;
 
 -- 2.7 Stock Locations (مواقع المخزون)
-INSERT INTO stock_locations (id, name, address, "isActive", "createdAt", "updatedAt")
-SELECT gen_random_uuid(), 'Store', 'Store Address', true, NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM stock_locations WHERE name = 'Store')
-UNION ALL
-SELECT gen_random_uuid(), 'Warehouse', 'Main Warehouse', true, NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM stock_locations WHERE name = 'Warehouse');
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'stock_locations') THEN
+    INSERT INTO stock_locations (id, name, address, "isActive", "createdAt", "updatedAt")
+    SELECT gen_random_uuid(), 'Store', 'Store Address', true, NOW(), NOW()
+    WHERE NOT EXISTS (SELECT 1 FROM stock_locations WHERE name = 'Store')
+    UNION ALL
+    SELECT gen_random_uuid(), 'Warehouse', 'Main Warehouse', true, NOW(), NOW()
+    WHERE NOT EXISTS (SELECT 1 FROM stock_locations WHERE name = 'Warehouse');
+  END IF;
+END $$;
 
 -- 2.8 Payment Methods (طرق الدفع)
-INSERT INTO payment_methods (id, code, "nameAr", "nameEn", "isAvailableOnPos", "isAvailableOnline", "createdAt", "updatedAt")
-VALUES
-  (gen_random_uuid(), 'cash', 'نقد', 'Cash', true, false, NOW(), NOW()),
-  (gen_random_uuid(), 'vodafone_cash', 'فودافون كاش', 'Vodafone Cash', true, true, NOW(), NOW()),
-  (gen_random_uuid(), 'instapay', 'انستا باي', 'Instapay', true, true, NOW(), NOW()),
-  (gen_random_uuid(), 'fawry', 'فوري', 'Fawry', true, true, NOW(), NOW()),
-  (gen_random_uuid(), 'cod', 'الدفع عند الاستلام', 'Cash on Delivery', false, true, NOW(), NOW())
-ON CONFLICT (code) DO UPDATE SET
-  "nameAr" = EXCLUDED."nameAr",
-  "nameEn" = EXCLUDED."nameEn",
-  "isAvailableOnPos" = EXCLUDED."isAvailableOnPos",
-  "isAvailableOnline" = EXCLUDED."isAvailableOnline";
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'payment_methods') THEN
+    INSERT INTO payment_methods (id, code, "nameAr", "nameEn", "isAvailableOnPos", "isAvailableOnline", "createdAt", "updatedAt")
+    VALUES
+      (gen_random_uuid(), 'cash', 'نقد', 'Cash', true, false, NOW(), NOW()),
+      (gen_random_uuid(), 'vodafone_cash', 'فودافون كاش', 'Vodafone Cash', true, true, NOW(), NOW()),
+      (gen_random_uuid(), 'instapay', 'انستا باي', 'Instapay', true, true, NOW(), NOW()),
+      (gen_random_uuid(), 'fawry', 'فوري', 'Fawry', true, true, NOW(), NOW()),
+      (gen_random_uuid(), 'cod', 'الدفع عند الاستلام', 'Cash on Delivery', false, true, NOW(), NOW())
+    ON CONFLICT (code) DO UPDATE SET
+      "nameAr" = EXCLUDED."nameAr",
+      "nameEn" = EXCLUDED."nameEn",
+      "isAvailableOnPos" = EXCLUDED."isAvailableOnPos",
+      "isAvailableOnline" = EXCLUDED."isAvailableOnline";
+  END IF;
+END $$;
 
 -- ============================================
 -- 3. إعادة تفعيل RLS
