@@ -19,36 +19,126 @@ ALTER TABLE IF EXISTS payments DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS users DISABLE ROW LEVEL SECURITY;
 
 -- حذف البيانات بترتيب صحيح (من الأبناء إلى الآباء)
-TRUNCATE TABLE IF EXISTS stock_items CASCADE;
-TRUNCATE TABLE IF EXISTS stock_transfers CASCADE;
-TRUNCATE TABLE IF EXISTS order_items CASCADE;
-TRUNCATE TABLE IF EXISTS orders CASCADE;
-TRUNCATE TABLE IF EXISTS invoice_items CASCADE;
-TRUNCATE TABLE IF EXISTS invoices CASCADE;
-TRUNCATE TABLE IF EXISTS payments CASCADE;
-TRUNCATE TABLE IF EXISTS product_images CASCADE;
-TRUNCATE TABLE IF EXISTS product_variants CASCADE;
-TRUNCATE TABLE IF EXISTS products CASCADE;
-TRUNCATE TABLE IF EXISTS expenses CASCADE;
-TRUNCATE TABLE IF EXISTS user_addresses CASCADE;
-TRUNCATE TABLE IF EXISTS users CASCADE;
-TRUNCATE TABLE IF EXISTS payment_methods CASCADE;
-TRUNCATE TABLE IF EXISTS stock_locations CASCADE;
-TRUNCATE TABLE IF EXISTS categories CASCADE;
-TRUNCATE TABLE IF EXISTS colors CASCADE;
-TRUNCATE TABLE IF EXISTS sizes CASCADE;
-TRUNCATE TABLE IF EXISTS role_permissions CASCADE;
-TRUNCATE TABLE IF EXISTS permissions CASCADE;
-TRUNCATE TABLE IF EXISTS roles CASCADE;
+-- استخدام DO block للتحقق من وجود الجداول قبل TRUNCATE
+DO $$
+BEGIN
+  -- حذف البيانات من الجداول (إذا كانت موجودة)
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'stock_items') THEN
+    TRUNCATE TABLE stock_items CASCADE;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'stock_transfers') THEN
+    TRUNCATE TABLE stock_transfers CASCADE;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'order_items') THEN
+    TRUNCATE TABLE order_items CASCADE;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'orders') THEN
+    TRUNCATE TABLE orders CASCADE;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'invoice_items') THEN
+    TRUNCATE TABLE invoice_items CASCADE;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'invoices') THEN
+    TRUNCATE TABLE invoices CASCADE;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'payments') THEN
+    TRUNCATE TABLE payments CASCADE;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'product_images') THEN
+    TRUNCATE TABLE product_images CASCADE;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'product_variants') THEN
+    TRUNCATE TABLE product_variants CASCADE;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'products') THEN
+    TRUNCATE TABLE products CASCADE;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'expenses') THEN
+    TRUNCATE TABLE expenses CASCADE;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'user_addresses') THEN
+    TRUNCATE TABLE user_addresses CASCADE;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'users') THEN
+    TRUNCATE TABLE users CASCADE;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'payment_methods') THEN
+    TRUNCATE TABLE payment_methods CASCADE;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'stock_locations') THEN
+    TRUNCATE TABLE stock_locations CASCADE;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'categories') THEN
+    TRUNCATE TABLE categories CASCADE;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'colors') THEN
+    TRUNCATE TABLE colors CASCADE;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'sizes') THEN
+    TRUNCATE TABLE sizes CASCADE;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'role_permissions') THEN
+    TRUNCATE TABLE role_permissions CASCADE;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'permissions') THEN
+    TRUNCATE TABLE permissions CASCADE;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'roles') THEN
+    TRUNCATE TABLE roles CASCADE;
+  END IF;
+END $$;
 
--- إعادة تعيين Sequences
-ALTER SEQUENCE IF EXISTS roles_id_seq RESTART WITH 1;
-ALTER SEQUENCE IF EXISTS permissions_id_seq RESTART WITH 1;
-ALTER SEQUENCE IF EXISTS sizes_id_seq RESTART WITH 1;
-ALTER SEQUENCE IF EXISTS colors_id_seq RESTART WITH 1;
-ALTER SEQUENCE IF EXISTS categories_id_seq RESTART WITH 1;
-ALTER SEQUENCE IF EXISTS stock_locations_id_seq RESTART WITH 1;
-ALTER SEQUENCE IF EXISTS payment_methods_id_seq RESTART WITH 1;
+-- إعادة تعيين Sequences (إذا كانت موجودة)
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM pg_sequences WHERE sequencename = 'roles_id_seq') THEN
+    ALTER SEQUENCE roles_id_seq RESTART WITH 1;
+  END IF;
+  
+  IF EXISTS (SELECT FROM pg_sequences WHERE sequencename = 'permissions_id_seq') THEN
+    ALTER SEQUENCE permissions_id_seq RESTART WITH 1;
+  END IF;
+  
+  IF EXISTS (SELECT FROM pg_sequences WHERE sequencename = 'sizes_id_seq') THEN
+    ALTER SEQUENCE sizes_id_seq RESTART WITH 1;
+  END IF;
+  
+  IF EXISTS (SELECT FROM pg_sequences WHERE sequencename = 'colors_id_seq') THEN
+    ALTER SEQUENCE colors_id_seq RESTART WITH 1;
+  END IF;
+  
+  IF EXISTS (SELECT FROM pg_sequences WHERE sequencename = 'categories_id_seq') THEN
+    ALTER SEQUENCE categories_id_seq RESTART WITH 1;
+  END IF;
+  
+  IF EXISTS (SELECT FROM pg_sequences WHERE sequencename = 'stock_locations_id_seq') THEN
+    ALTER SEQUENCE stock_locations_id_seq RESTART WITH 1;
+  END IF;
+  
+  IF EXISTS (SELECT FROM pg_sequences WHERE sequencename = 'payment_methods_id_seq') THEN
+    ALTER SEQUENCE payment_methods_id_seq RESTART WITH 1;
+  END IF;
+END $$;
 
 -- ============================================
 -- 2. إعادة زرع البيانات الأساسية
@@ -234,18 +324,22 @@ ON CONFLICT (code) DO UPDATE SET
 
 -- 2.6 Categories (الفئات)
 INSERT INTO categories (id, "nameAr", "nameEn", "sortOrder", "createdAt", "updatedAt")
-VALUES
-  (gen_random_uuid(), 'عبايات', 'Abayas', 1, NOW(), NOW()),
-  (gen_random_uuid(), 'جاكيتات', 'Jackets', 2, NOW(), NOW()),
-  (gen_random_uuid(), 'فساتين', 'Dresses', 3, NOW(), NOW())
-ON CONFLICT DO NOTHING;
+SELECT gen_random_uuid(), 'عبايات', 'Abayas', 1, NOW(), NOW()
+WHERE NOT EXISTS (SELECT 1 FROM categories WHERE "nameEn" = 'Abayas')
+UNION ALL
+SELECT gen_random_uuid(), 'جاكيتات', 'Jackets', 2, NOW(), NOW()
+WHERE NOT EXISTS (SELECT 1 FROM categories WHERE "nameEn" = 'Jackets')
+UNION ALL
+SELECT gen_random_uuid(), 'فساتين', 'Dresses', 3, NOW(), NOW()
+WHERE NOT EXISTS (SELECT 1 FROM categories WHERE "nameEn" = 'Dresses');
 
 -- 2.7 Stock Locations (مواقع المخزون)
 INSERT INTO stock_locations (id, name, address, "isActive", "createdAt", "updatedAt")
-VALUES
-  (gen_random_uuid(), 'Store', 'Store Address', true, NOW(), NOW()),
-  (gen_random_uuid(), 'Warehouse', 'Main Warehouse', true, NOW(), NOW())
-ON CONFLICT DO NOTHING;
+SELECT gen_random_uuid(), 'Store', 'Store Address', true, NOW(), NOW()
+WHERE NOT EXISTS (SELECT 1 FROM stock_locations WHERE name = 'Store')
+UNION ALL
+SELECT gen_random_uuid(), 'Warehouse', 'Main Warehouse', true, NOW(), NOW()
+WHERE NOT EXISTS (SELECT 1 FROM stock_locations WHERE name = 'Warehouse');
 
 -- 2.8 Payment Methods (طرق الدفع)
 INSERT INTO payment_methods (id, code, "nameAr", "nameEn", "isAvailableOnPos", "isAvailableOnline", "createdAt", "updatedAt")
