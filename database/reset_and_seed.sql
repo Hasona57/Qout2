@@ -175,23 +175,28 @@ DECLARE
   v_customer_role_id UUID;
   v_perm_id UUID;
 BEGIN
-  -- إنشاء الأدوار
-  INSERT INTO roles (id, name, description, "createdAt", "updatedAt")
-  VALUES
-    (gen_random_uuid(), 'admin', 'Full system access', NOW(), NOW()),
-    (gen_random_uuid(), 'sales_employee', 'POS access only', NOW(), NOW()),
-    (gen_random_uuid(), 'factory_manager', 'Production management', NOW(), NOW()),
-    (gen_random_uuid(), 'storekeeper', 'Inventory management', NOW(), NOW()),
-    (gen_random_uuid(), 'customer', 'Customer access', NOW(), NOW())
-  ON CONFLICT DO NOTHING
-  RETURNING id INTO v_admin_role_id;
+  -- التحقق من وجود جدول roles
+  IF NOT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'roles') THEN
+    RETURN;
+  END IF;
+  
+  -- إنشاء الأدوار باستخدام EXECUTE
+  EXECUTE '
+    INSERT INTO roles (id, name, description, "createdAt", "updatedAt")
+    VALUES
+      (gen_random_uuid(), ''admin'', ''Full system access'', NOW(), NOW()),
+      (gen_random_uuid(), ''sales_employee'', ''POS access only'', NOW(), NOW()),
+      (gen_random_uuid(), ''factory_manager'', ''Production management'', NOW(), NOW()),
+      (gen_random_uuid(), ''storekeeper'', ''Inventory management'', NOW(), NOW()),
+      (gen_random_uuid(), ''customer'', ''Customer access'', NOW(), NOW())
+    ON CONFLICT DO NOTHING';
 
   -- الحصول على IDs للأدوار
-  SELECT id INTO v_admin_role_id FROM roles WHERE name = 'admin';
-  SELECT id INTO v_sales_role_id FROM roles WHERE name = 'sales_employee';
-  SELECT id INTO v_factory_role_id FROM roles WHERE name = 'factory_manager';
-  SELECT id INTO v_storekeeper_role_id FROM roles WHERE name = 'storekeeper';
-  SELECT id INTO v_customer_role_id FROM roles WHERE name = 'customer';
+  EXECUTE 'SELECT id FROM roles WHERE name = ''admin''' INTO v_admin_role_id;
+  EXECUTE 'SELECT id FROM roles WHERE name = ''sales_employee''' INTO v_sales_role_id;
+  EXECUTE 'SELECT id FROM roles WHERE name = ''factory_manager''' INTO v_factory_role_id;
+  EXECUTE 'SELECT id FROM roles WHERE name = ''storekeeper''' INTO v_storekeeper_role_id;
+  EXECUTE 'SELECT id FROM roles WHERE name = ''customer''' INTO v_customer_role_id;
 
   -- ربط الصلاحيات بالأدوار (فقط إذا كان جدول permissions موجود)
   IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'permissions') 
