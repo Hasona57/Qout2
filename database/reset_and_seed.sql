@@ -194,49 +194,32 @@ BEGIN
   SELECT id INTO v_customer_role_id FROM roles WHERE name = 'customer';
 
   -- ربط الصلاحيات بالأدوار (فقط إذا كان جدول permissions موجود)
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'permissions') THEN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'permissions') 
+     AND EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'role_permissions') THEN
     -- Admin: جميع الصلاحيات
-    FOR v_perm_id IN SELECT id FROM permissions LOOP
-      IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'role_permissions') THEN
-        INSERT INTO role_permissions ("roleId", "permissionId")
-        VALUES (v_admin_role_id, v_perm_id)
-        ON CONFLICT DO NOTHING;
-      END IF;
+    FOR v_perm_id IN EXECUTE 'SELECT id FROM permissions' LOOP
+      EXECUTE format('INSERT INTO role_permissions ("roleId", "permissionId") VALUES (%L, %L) ON CONFLICT DO NOTHING', v_admin_role_id, v_perm_id);
     END LOOP;
 
     -- Sales Employee: sales و products.read
-    FOR v_perm_id IN SELECT id FROM permissions WHERE name LIKE 'sales%' OR name = 'products.read' LOOP
-      IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'role_permissions') THEN
-        INSERT INTO role_permissions ("roleId", "permissionId")
-        VALUES (v_sales_role_id, v_perm_id)
-        ON CONFLICT DO NOTHING;
-      END IF;
+    FOR v_perm_id IN EXECUTE 'SELECT id FROM permissions WHERE name LIKE ''sales%%'' OR name = ''products.read''' LOOP
+      EXECUTE format('INSERT INTO role_permissions ("roleId", "permissionId") VALUES (%L, %L) ON CONFLICT DO NOTHING', v_sales_role_id, v_perm_id);
     END LOOP;
 
     -- Factory Manager: production و inventory
-    FOR v_perm_id IN SELECT id FROM permissions WHERE name LIKE 'production%' OR name LIKE 'inventory%' LOOP
-      IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'role_permissions') THEN
-        INSERT INTO role_permissions ("roleId", "permissionId")
-        VALUES (v_factory_role_id, v_perm_id)
-        ON CONFLICT DO NOTHING;
-      END IF;
+    FOR v_perm_id IN EXECUTE 'SELECT id FROM permissions WHERE name LIKE ''production%%'' OR name LIKE ''inventory%%''' LOOP
+      EXECUTE format('INSERT INTO role_permissions ("roleId", "permissionId") VALUES (%L, %L) ON CONFLICT DO NOTHING', v_factory_role_id, v_perm_id);
     END LOOP;
 
     -- Storekeeper: inventory و products.read
-    FOR v_perm_id IN SELECT id FROM permissions WHERE name LIKE 'inventory%' OR name = 'products.read' LOOP
-      IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'role_permissions') THEN
-        INSERT INTO role_permissions ("roleId", "permissionId")
-        VALUES (v_storekeeper_role_id, v_perm_id)
-        ON CONFLICT DO NOTHING;
-      END IF;
+    FOR v_perm_id IN EXECUTE 'SELECT id FROM permissions WHERE name LIKE ''inventory%%'' OR name = ''products.read''' LOOP
+      EXECUTE format('INSERT INTO role_permissions ("roleId", "permissionId") VALUES (%L, %L) ON CONFLICT DO NOTHING', v_storekeeper_role_id, v_perm_id);
     END LOOP;
 
     -- Customer: products.read فقط
-    SELECT id INTO v_perm_id FROM permissions WHERE name = 'products.read';
-    IF v_perm_id IS NOT NULL AND EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'role_permissions') THEN
-      INSERT INTO role_permissions ("roleId", "permissionId")
-      VALUES (v_customer_role_id, v_perm_id)
-      ON CONFLICT DO NOTHING;
+    EXECUTE 'SELECT id FROM permissions WHERE name = ''products.read''' INTO v_perm_id;
+    IF v_perm_id IS NOT NULL THEN
+      EXECUTE format('INSERT INTO role_permissions ("roleId", "permissionId") VALUES (%L, %L) ON CONFLICT DO NOTHING', v_customer_role_id, v_perm_id);
     END IF;
   END IF;
 END $$;
