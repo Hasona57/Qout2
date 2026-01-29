@@ -418,21 +418,51 @@ ALTER TABLE IF EXISTS users ENABLE ROW LEVEL SECURITY;
 -- 4. التحقق من البيانات
 -- ============================================
 
-SELECT 'Roles' as table_name, COUNT(*) as count FROM roles
-UNION ALL
-SELECT 'Users', COUNT(*) FROM users
-UNION ALL
-SELECT 'Sizes', COUNT(*) FROM sizes
-UNION ALL
-SELECT 'Colors', COUNT(*) FROM colors
-UNION ALL
-SELECT 'Categories', COUNT(*) FROM categories
-UNION ALL
-SELECT 'Stock Locations', COUNT(*) FROM stock_locations
-UNION ALL
-SELECT 'Payment Methods', COUNT(*) FROM payment_methods
-UNION ALL
-SELECT 'Permissions', COUNT(*) FROM permissions;
+DO $$
+DECLARE
+  v_result TEXT := '';
+BEGIN
+  -- التحقق من البيانات في الجداول الموجودة فقط
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'roles') THEN
+    EXECUTE 'SELECT COUNT(*) FROM roles' INTO v_result;
+    RAISE NOTICE 'Roles: %', v_result;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users') THEN
+    EXECUTE 'SELECT COUNT(*) FROM users' INTO v_result;
+    RAISE NOTICE 'Users: %', v_result;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'sizes') THEN
+    EXECUTE 'SELECT COUNT(*) FROM sizes' INTO v_result;
+    RAISE NOTICE 'Sizes: %', v_result;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'colors') THEN
+    EXECUTE 'SELECT COUNT(*) FROM colors' INTO v_result;
+    RAISE NOTICE 'Colors: %', v_result;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'categories') THEN
+    EXECUTE 'SELECT COUNT(*) FROM categories' INTO v_result;
+    RAISE NOTICE 'Categories: %', v_result;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'stock_locations') THEN
+    EXECUTE 'SELECT COUNT(*) FROM stock_locations' INTO v_result;
+    RAISE NOTICE 'Stock Locations: %', v_result;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'payment_methods') THEN
+    EXECUTE 'SELECT COUNT(*) FROM payment_methods' INTO v_result;
+    RAISE NOTICE 'Payment Methods: %', v_result;
+  END IF;
+  
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'permissions') THEN
+    EXECUTE 'SELECT COUNT(*) FROM permissions' INTO v_result;
+    RAISE NOTICE 'Permissions: %', v_result;
+  END IF;
+END $$;
 
 -- ============================================
 -- ملاحظات مهمة:
