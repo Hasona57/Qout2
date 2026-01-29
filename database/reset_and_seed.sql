@@ -247,12 +247,13 @@ BEGIN
     RETURN;
   END IF;
   
-  SELECT id INTO v_admin_role_id FROM roles WHERE name = 'admin';
-  SELECT id INTO v_sales_role_id FROM roles WHERE name = 'sales_employee';
+  EXECUTE 'SELECT id FROM roles WHERE name = ''admin''' INTO v_admin_role_id;
+  EXECUTE 'SELECT id FROM roles WHERE name = ''sales_employee''' INTO v_sales_role_id;
 
   -- كلمات المرور: admin123 و pos123
   -- Hashes تم توليدها باستخدام: bcrypt.hash('admin123', 10) و bcrypt.hash('pos123', 10)
-  INSERT INTO users (id, name, email, password, "roleId", "isActive", "employeeCode", "commissionRate", "createdAt", "updatedAt")
+  EXECUTE format('
+    INSERT INTO users (id, name, email, password, "roleId", "isActive", "employeeCode", "commissionRate", "createdAt", "updatedAt")
   VALUES
     (
       gen_random_uuid(), 
@@ -270,18 +271,18 @@ BEGIN
       gen_random_uuid(), 
       'POS Sales Employee', 
       'pos@qote.com', 
-      '$2b$10$rOzJqZqZqZqZqZqZqZqZqOZqZqZqZqZqZqZqZqZqZqZqZqZqZqZqZq', -- pos123
-      v_sales_role_id, 
+      ''$2b$10$rOzJqZqZqZqZqZqZqZqZqOZqZqZqZqZqZqZqZqZqZqZqZqZqZqZqZq'',
+      %L, 
       true,
-      'POS001',
-      '5.00',
+      ''POS001'',
+      ''5.00'',
       NOW(), 
       NOW()
     )
-  ON CONFLICT (email) DO UPDATE SET
-    password = EXCLUDED.password,
-    "roleId" = EXCLUDED."roleId",
-    "isActive" = true;
+    ON CONFLICT (email) DO UPDATE SET
+      password = EXCLUDED.password,
+      "roleId" = EXCLUDED."roleId",
+      "isActive" = true', v_admin_role_id, v_sales_role_id);
 END $$;
 
 -- 2.4 Sizes (المقاسات)
