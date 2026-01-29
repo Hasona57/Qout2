@@ -8,14 +8,32 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseServer()
 
+    // First, check if there are ANY stock items at all (for debugging)
+    const { data: allStockCheck, error: allStockError } = await supabase
+      .from('stock_items')
+      .select('id, locationId, variantId, quantity')
+      .limit(5)
+
+    console.log('=== STOCK API DEBUG ===')
+    console.log('LocationId requested:', locationId)
+    console.log('Total stock items in DB (sample):', allStockCheck?.length || 0)
+    if (allStockCheck && allStockCheck.length > 0) {
+      console.log('Sample stock items:', JSON.stringify(allStockCheck, null, 2))
+    }
+    if (allStockError) {
+      console.error('Error checking all stock:', allStockError)
+    }
+
     // Get stock items - show all items (including 0 quantity) for admin view
-    // But we can filter to show only available if needed
     let stockQuery = supabase
       .from('stock_items')
       .select('*')
 
     if (locationId) {
       stockQuery = stockQuery.eq('locationId', locationId)
+      console.log('Filtering by locationId:', locationId)
+    } else {
+      console.log('No locationId filter - fetching all stock items')
     }
 
     const { data: stockData, error } = await stockQuery
@@ -34,6 +52,17 @@ export async function GET(request: NextRequest) {
     console.log(`Fetched ${stockData?.length || 0} stock items for locationId: ${locationId || 'all'}`)
     if (stockData && stockData.length > 0) {
       console.log('Sample stock item:', JSON.stringify(stockData[0], null, 2))
+    } else {
+      console.warn('No stock items found!')
+      // Check if location exists
+      if (locationId) {
+        const { data: locationCheck } = await supabase
+          .from('stock_locations')
+          .select('id, name')
+          .eq('id', locationId)
+          .single()
+        console.log('Location check:', locationCheck)
+      }
     }
     let stock = stockData || []
 

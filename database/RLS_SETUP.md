@@ -120,3 +120,4 @@ After enabling RLS:
 4. Add user-specific policies for sensitive data
 
 
+
