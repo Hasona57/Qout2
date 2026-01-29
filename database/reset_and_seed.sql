@@ -23,88 +23,89 @@ ALTER TABLE IF EXISTS users DISABLE ROW LEVEL SECURITY;
 DO $$
 BEGIN
   -- حذف البيانات من الجداول (إذا كانت موجودة)
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'stock_items') THEN
-    TRUNCATE TABLE stock_items CASCADE;
+  -- استخدام EXECUTE لتجنب أخطاء compile-time
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'stock_items') THEN
+    EXECUTE 'TRUNCATE TABLE stock_items CASCADE';
   END IF;
   
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'stock_transfers') THEN
-    TRUNCATE TABLE stock_transfers CASCADE;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'stock_transfers') THEN
+    EXECUTE 'TRUNCATE TABLE stock_transfers CASCADE';
   END IF;
   
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'order_items') THEN
-    TRUNCATE TABLE order_items CASCADE;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'order_items') THEN
+    EXECUTE 'TRUNCATE TABLE order_items CASCADE';
   END IF;
   
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'orders') THEN
-    TRUNCATE TABLE orders CASCADE;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'orders') THEN
+    EXECUTE 'TRUNCATE TABLE orders CASCADE';
   END IF;
   
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'invoice_items') THEN
-    TRUNCATE TABLE invoice_items CASCADE;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'invoice_items') THEN
+    EXECUTE 'TRUNCATE TABLE invoice_items CASCADE';
   END IF;
   
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'invoices') THEN
-    TRUNCATE TABLE invoices CASCADE;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'invoices') THEN
+    EXECUTE 'TRUNCATE TABLE invoices CASCADE';
   END IF;
   
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'payments') THEN
-    TRUNCATE TABLE payments CASCADE;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'payments') THEN
+    EXECUTE 'TRUNCATE TABLE payments CASCADE';
   END IF;
   
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'product_images') THEN
-    TRUNCATE TABLE product_images CASCADE;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'product_images') THEN
+    EXECUTE 'TRUNCATE TABLE product_images CASCADE';
   END IF;
   
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'product_variants') THEN
-    TRUNCATE TABLE product_variants CASCADE;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'product_variants') THEN
+    EXECUTE 'TRUNCATE TABLE product_variants CASCADE';
   END IF;
   
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'products') THEN
-    TRUNCATE TABLE products CASCADE;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'products') THEN
+    EXECUTE 'TRUNCATE TABLE products CASCADE';
   END IF;
   
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'expenses') THEN
-    TRUNCATE TABLE expenses CASCADE;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'expenses') THEN
+    EXECUTE 'TRUNCATE TABLE expenses CASCADE';
   END IF;
   
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'user_addresses') THEN
-    TRUNCATE TABLE user_addresses CASCADE;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'user_addresses') THEN
+    EXECUTE 'TRUNCATE TABLE user_addresses CASCADE';
   END IF;
   
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'users') THEN
-    TRUNCATE TABLE users CASCADE;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users') THEN
+    EXECUTE 'TRUNCATE TABLE users CASCADE';
   END IF;
   
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'payment_methods') THEN
-    TRUNCATE TABLE payment_methods CASCADE;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'payment_methods') THEN
+    EXECUTE 'TRUNCATE TABLE payment_methods CASCADE';
   END IF;
   
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'stock_locations') THEN
-    TRUNCATE TABLE stock_locations CASCADE;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'stock_locations') THEN
+    EXECUTE 'TRUNCATE TABLE stock_locations CASCADE';
   END IF;
   
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'categories') THEN
-    TRUNCATE TABLE categories CASCADE;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'categories') THEN
+    EXECUTE 'TRUNCATE TABLE categories CASCADE';
   END IF;
   
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'colors') THEN
-    TRUNCATE TABLE colors CASCADE;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'colors') THEN
+    EXECUTE 'TRUNCATE TABLE colors CASCADE';
   END IF;
   
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'sizes') THEN
-    TRUNCATE TABLE sizes CASCADE;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'sizes') THEN
+    EXECUTE 'TRUNCATE TABLE sizes CASCADE';
   END IF;
   
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'role_permissions') THEN
-    TRUNCATE TABLE role_permissions CASCADE;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'role_permissions') THEN
+    EXECUTE 'TRUNCATE TABLE role_permissions CASCADE';
   END IF;
   
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'permissions') THEN
-    TRUNCATE TABLE permissions CASCADE;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'permissions') THEN
+    EXECUTE 'TRUNCATE TABLE permissions CASCADE';
   END IF;
   
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'roles') THEN
-    TRUNCATE TABLE roles CASCADE;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'roles') THEN
+    EXECUTE 'TRUNCATE TABLE roles CASCADE';
   END IF;
 END $$;
 
