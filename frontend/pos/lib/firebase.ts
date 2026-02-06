@@ -1,6 +1,6 @@
 // Firebase Client Configuration
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app'
-import { getDatabase, Database, ref, get, set, push, update, remove, query, orderByChild, equalTo, limitToLast, startAt, endAt, onValue, off } from 'firebase/database'
+import { getDatabase, Database, ref, get, set, push, update, remove, query, orderByChild, equalTo, limitToLast, startAt, endAt, onValue, off, DatabaseReference, Query } from 'firebase/database'
 import { getAuth, Auth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, User } from 'firebase/auth'
 
 // Firebase configuration
@@ -91,7 +91,7 @@ export const db = {
     endAt?: any
   }): Promise<any[]> {
     try {
-      let dbQuery = ref(database, path)
+      let dbQuery: DatabaseReference | Query = ref(database, path)
       
       if (options?.orderBy) {
         dbQuery = query(dbQuery, orderByChild(options.orderBy))
