@@ -16,12 +16,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Email already registered' }, { status: 400 })
     }
 
-    // Find customer role
+    // Find customer role, create if it doesn't exist
     const roles = await db.getAll('roles')
-    const customerRole = roles.find((r: any) => r.name === 'customer')
+    let customerRole = roles.find((r: any) => r.name === 'customer')
 
     if (!customerRole) {
-      return NextResponse.json({ error: 'Customer role not found. Please run database seeds first.' }, { status: 500 })
+      // Create customer role if it doesn't exist
+      console.log('Customer role not found, creating it...')
+      const roleId = Date.now().toString(36) + Math.random().toString(36).substr(2) + 'role'
+      customerRole = {
+        id: roleId,
+        name: 'customer',
+        description: 'Customer access',
+        createdAt: new Date().toISOString(),
+      }
+      await db.set(`roles/${roleId}`, customerRole)
+      console.log('Customer role created:', roleId)
     }
 
     // Create user in Firebase Auth
@@ -42,17 +52,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Create user profile in Firebase Realtime Database
-    const userData = {
-      name,
-      email,
-      phone: phone || null,
-      roleId: customerRole.id,
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }
+    try {
+      const userData = {
+        name,
+        email,
+        phone: phone || null,
+        roleId: customerRole.id,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
 
-    await createUserProfile(authResult.uid, userData)
+      await createUserProfile(authResult.uid, userData)
+    } catch (profileError: any) {
+      console.error('Error creating user profile:', profileError)
+      // If profile creation fails, we should still return success since user was created in Firebase Auth
+      // But log the error for debugging
+    }
 
     // Get role
     const role = await getUserRole(customerRole.id)

@@ -33,11 +33,39 @@ export async function POST(request: NextRequest) {
 
     // Get user profile from Firebase Realtime Database
     const { db } = getFirebaseServer()
-    const userProfile = await db.get(`users/${authResult.uid}`)
+    let userProfile = await db.get(`users/${authResult.uid}`)
 
+    // If user doesn't exist in database but exists in Firebase Auth, create a basic profile
     if (!userProfile) {
-      console.log('User not found')
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
+      console.log('User not found in database, creating basic profile...')
+      // Find customer role
+      const roles = await db.getAll('roles')
+      let customerRole = roles.find((r: any) => r.name === 'customer')
+      
+      if (!customerRole) {
+        // Create customer role if it doesn't exist
+        const roleId = Date.now().toString(36) + Math.random().toString(36).substr(2) + 'role'
+        customerRole = {
+          id: roleId,
+          name: 'customer',
+          description: 'Customer access',
+          createdAt: new Date().toISOString(),
+        }
+        await db.set(`roles/${roleId}`, customerRole)
+      }
+
+      // Create basic user profile
+      userProfile = {
+        id: authResult.uid,
+        email: authResult.email,
+        name: authResult.email.split('@')[0], // Use email prefix as name
+        roleId: customerRole.id,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+      await db.set(`users/${authResult.uid}`, userProfile)
+      console.log('Created basic user profile for:', authResult.uid)
     }
 
     if (userProfile.isActive === false) {

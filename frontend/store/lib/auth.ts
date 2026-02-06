@@ -28,7 +28,7 @@ export async function register(name: string, email: string, password: string, ph
     let errorMessage = 'Registration failed';
     try {
       const error = await response.json();
-      errorMessage = error.message || errorMessage;
+      errorMessage = error.error || error.message || errorMessage;
     } catch {
       errorMessage = `HTTP ${response.status}: ${response.statusText}`;
     }
@@ -67,7 +67,7 @@ export async function login(email: string, password: string): Promise<AuthRespon
     let errorMessage = 'Login failed';
     try {
       const error = await response.json();
-      errorMessage = error.message || errorMessage;
+      errorMessage = error.error || error.message || errorMessage;
     } catch {
       errorMessage = `HTTP ${response.status}: ${response.statusText}`;
     }
