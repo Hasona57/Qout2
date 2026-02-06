@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
     const body = await request.json()
 
     const { orderId, reason, items } = body
@@ -16,43 +16,28 @@ export async function POST(request: NextRequest) {
     }
 
     // Create return record
-    const { data: returnRecord, error: returnError } = await supabase
-      .from('returns')
-      .insert({
-        orderId,
-        reason: reason || 'Return requested by user',
-        status: 'pending',
-      })
-      .select()
-      .single()
-
-    if (returnError) {
-      console.error('Error creating return:', returnError)
-      return NextResponse.json(
-        { error: returnError.message || 'Failed to create return', success: false },
-        { status: 500 }
-      )
+    const returnId = Date.now().toString(36) + Math.random().toString(36).substr(2)
+    const returnRecord = {
+      id: returnId,
+      orderId,
+      reason: reason || 'Return requested by user',
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     }
 
+    await db.set(`returns/${returnId}`, returnRecord)
+
     // Create return items
-    const returnItems = items.map((item: any) => ({
-      returnId: returnRecord.id,
-      orderItemId: item.orderItemId,
-      quantity: item.quantity,
-    }))
-
-    const { error: itemsError } = await supabase
-      .from('return_items')
-      .insert(returnItems)
-
-    if (itemsError) {
-      console.error('Error creating return items:', itemsError)
-      // Delete the return record if items failed
-      await supabase.from('returns').delete().eq('id', returnRecord.id)
-      return NextResponse.json(
-        { error: itemsError.message || 'Failed to create return items', success: false },
-        { status: 500 }
-      )
+    for (const item of items) {
+      const itemId = Date.now().toString(36) + Math.random().toString(36).substr(2) + 'ret'
+      await db.set(`return_items/${itemId}`, {
+        id: itemId,
+        returnId: returnId,
+        orderItemId: item.orderItemId,
+        quantity: item.quantity,
+        createdAt: new Date().toISOString(),
+      })
     }
 
     return NextResponse.json({ data: returnRecord, success: true })
@@ -64,6 +49,10 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+
+
+
 
 
 

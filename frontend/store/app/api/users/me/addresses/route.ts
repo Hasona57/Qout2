@@ -1,23 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function GET(request: NextRequest) {
   try {
     // Get user from token/cookie (simplified - you may need to implement proper auth)
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
     
     // For now, return empty array - implement proper auth to get userId
     // const userId = await getUserIdFromRequest(request)
     
-    // const { data: addresses, error } = await supabase
-    //   .from('addresses')
-    //   .select('*')
-    //   .eq('userId', userId)
-
-    // if (error) {
-    //   console.error('Error fetching addresses:', error)
-    //   return NextResponse.json({ data: [], success: true })
-    // }
+    // const addresses = await db.getAll('addresses')
+    // const userAddresses = addresses.filter((a: any) => a.userId === userId)
 
     return NextResponse.json({ data: [], success: true })
   } catch (error: any) {
@@ -25,6 +18,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ data: [], success: true })
   }
 }
+
+
+
+
 
 
 

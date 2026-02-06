@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
-import jwt from 'jsonwebtoken'
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this'
+import { getFirebaseServer } from '@/lib/firebase'
+import { verifyIdToken } from '@/lib/firebase-auth-server'
 
 async function getUserIdFromToken(request: NextRequest): Promise<string | null> {
   try {
@@ -11,8 +9,7 @@ async function getUserIdFromToken(request: NextRequest): Promise<string | null> 
       return null
     }
     const token = authHeader.substring(7)
-    const decoded = jwt.verify(token, JWT_SECRET) as any
-    return decoded.sub || decoded.id || null
+    return await verifyIdToken(token)
   } catch {
     return null
   }
@@ -30,7 +27,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
     const userId = await getUserIdFromToken(request)
 
     if (!userId) {
@@ -41,13 +38,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Get invoice
-    const { data: invoice, error: invoiceError } = await supabase
-      .from('invoices')
-      .select('*')
-      .eq('id', invoiceId)
-      .single()
+    const invoice = await db.get(`invoices/${invoiceId}`)
 
-    if (invoiceError || !invoice) {
+    if (!invoice) {
       return NextResponse.json(
         { error: 'Invoice not found', success: false },
         { status: 404 }
@@ -60,23 +53,19 @@ export async function POST(request: NextRequest) {
     const newPaidAmount = currentPaid + paymentAmount
 
     // Create payment record
-    const { data: payment, error: paymentError } = await supabase
-      .from('payments')
-      .insert({
-        invoiceId,
-        amount: paymentAmount.toFixed(2),
-        paymentMethod: paymentMethodId,
-        status: 'completed',
-        notes: notes || null,
-        createdById: userId,
-      })
-      .select()
-      .single()
-
-    if (paymentError) {
-      console.error('Error creating payment:', paymentError)
-      return NextResponse.json({ error: paymentError.message, success: false }, { status: 500 })
+    const paymentId = Date.now().toString(36) + Math.random().toString(36).substr(2)
+    const payment = {
+      id: paymentId,
+      invoiceId,
+      amount: paymentAmount.toFixed(2),
+      paymentMethod: paymentMethodId,
+      status: 'completed',
+      notes: notes || null,
+      createdById: userId,
+      createdAt: new Date().toISOString(),
     }
+
+    await db.set(`payments/${paymentId}`, payment)
 
     // Update invoice paid amount and status
     let newStatus = invoice.status
@@ -86,18 +75,12 @@ export async function POST(request: NextRequest) {
       newStatus = 'partially_paid'
     }
 
-    const { error: updateError } = await supabase
-      .from('invoices')
-      .update({
-        paidAmount: newPaidAmount.toFixed(2),
-        status: newStatus,
-      })
-      .eq('id', invoiceId)
-
-    if (updateError) {
-      console.error('Error updating invoice:', updateError)
-      // Payment was created but invoice update failed - this is not ideal but payment is recorded
-    }
+    await db.update(`invoices/${invoiceId}`, {
+      ...invoice,
+      paidAmount: newPaidAmount.toFixed(2),
+      status: newStatus,
+      updatedAt: new Date().toISOString(),
+    })
 
     return NextResponse.json({ data: payment, success: true })
   } catch (error: any) {
@@ -105,6 +88,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message || 'Failed to create payment', success: false }, { status: 500 })
   }
 }
+
+
+
+
 
 
 

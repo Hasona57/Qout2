@@ -1,10 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 import { randomUUID } from 'crypto'
+
+// Firebase Storage REST API helper
+async function uploadToFirebaseStorage(
+  file: File,
+  filePath: string
+): Promise<string | null> {
+  try {
+    // Get Firebase Storage access token (using Firebase Admin SDK REST API)
+    // For now, we'll use a simpler approach: convert to base64 and store metadata
+    // In production, use Firebase Admin SDK or Firebase Storage REST API with proper auth
+    
+    // Convert file to base64 for storage in database (for small files)
+    // For larger files, implement Firebase Storage REST API upload
+    const arrayBuffer = await file.arrayBuffer()
+    const base64 = Buffer.from(arrayBuffer).toString('base64')
+    const dataUrl = `data:${file.type || 'image/jpeg'};base64,${base64}`
+    
+    // Store file data in Firebase Realtime Database
+    const { db } = getFirebaseServer()
+    const fileId = randomUUID()
+    await db.set(`file_storage/${fileId}`, {
+      id: fileId,
+      path: filePath,
+      dataUrl,
+      fileName: file.name,
+      mimeType: file.type || 'image/jpeg',
+      fileSize: file.size,
+      createdAt: new Date().toISOString(),
+    })
+    
+    // Return a URL that can be used to retrieve the file
+    // In production, this should be a Firebase Storage URL
+    return `/api/attachments/file/${fileId}`
+  } catch (error) {
+    console.error('Error uploading to Firebase Storage:', error)
+    return null
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
     const formData = await request.formData()
     
     const file = formData.get('file') as File
@@ -24,103 +62,62 @@ export async function POST(request: NextRequest) {
     const finalEntityId = !entityId || entityId === 'temp' ? randomUUID() : entityId
     const filePath = `${entityType}/${finalEntityId}/${fileName}`
 
-    // Convert File to ArrayBuffer then to Uint8Array for Supabase
-    const arrayBuffer = await file.arrayBuffer()
-    const uint8Array = new Uint8Array(arrayBuffer)
+    // Upload file to Firebase Storage
+    const publicUrl = await uploadToFirebaseStorage(file, filePath)
 
-    // Try uploading to Supabase Storage - try multiple bucket names
-    const bucketNames = ['product-images', 'attachments', 'images']
-    let uploadSuccess = false
-    let publicUrl = ''
-    let usedBucket = ''
-
-    for (const bucketName of bucketNames) {
-      try {
-        const { data, error } = await supabase.storage
-          .from(bucketName)
-          .upload(filePath, uint8Array, {
-            contentType: file.type || 'image/jpeg',
-            upsert: false,
-          })
-
-        if (!error && data) {
-          // Get public URL
-          const { data: urlData } = supabase.storage
-            .from(bucketName)
-            .getPublicUrl(filePath)
-
-          publicUrl = urlData.publicUrl
-          usedBucket = bucketName
-          uploadSuccess = true
-          break
-        } else {
-          console.error(`Error uploading to ${bucketName}:`, error)
-        }
-      } catch (err) {
-        console.error(`Exception uploading to ${bucketName}:`, err)
-        continue
-      }
-    }
-
-    // If upload failed, return error
-    if (!uploadSuccess) {
-      console.error('Failed to upload to all storage buckets')
-      // Return a placeholder URL or error
+    if (!publicUrl) {
       return NextResponse.json(
         { 
-          error: 'Failed to upload file. Please ensure a storage bucket (product-images, attachments, or images) exists in Supabase Storage.', 
+          error: 'Failed to upload file to Firebase Storage', 
           success: false,
-          details: 'Create a public bucket in Supabase Storage dashboard'
+          details: 'Please check Firebase Storage configuration'
         },
         { status: 500 }
       )
     }
 
-    // Try to save attachment record (optional - don't fail if this fails)
+    // Save attachment record
     try {
-      const { data: attachment, error: dbError } = await supabase
-        .from('attachments')
-        .insert({
-          entityType,
-          entityId: finalEntityId,
-          url: publicUrl,
-          fileName: file.name,
-          mimeType: file.type || 'image/jpeg',
-          fileSize: file.size,
-        })
-        .select()
-        .single()
-
-      if (!dbError && attachment) {
-        return NextResponse.json({
-          data: attachment,
-          url: publicUrl,
-          success: true,
-        })
-      }
-    } catch (dbErr) {
-      console.error('Error saving attachment record (non-critical):', dbErr)
-      // Continue even if DB save fails
-    }
-
-    // Return URL even if DB save failed - ensure format matches what frontend expects
-    return NextResponse.json({
-      data: {
-        url: publicUrl,
-        fileName: file.name,
+      const attachmentId = Date.now().toString(36) + Math.random().toString(36).substr(2)
+      const attachment = {
+        id: attachmentId,
         entityType,
         entityId: finalEntityId,
-      },
-      url: publicUrl, // Also include at root level for compatibility
-      success: true,
-    }, { status: 200 })
+        url: publicUrl,
+        fileName: file.name,
+        mimeType: file.type || 'image/jpeg',
+        fileSize: file.size,
+        createdAt: new Date().toISOString(),
+      }
+
+      await db.set(`attachments/${attachmentId}`, attachment)
+
+      return NextResponse.json({
+        data: attachment,
+        url: publicUrl,
+        success: true,
+      })
+    } catch (dbErr) {
+      console.error('Error saving attachment record (non-critical):', dbErr)
+      // Return URL even if DB save fails
+      return NextResponse.json({
+        data: {
+          url: publicUrl,
+          fileName: file.name,
+          entityType,
+          entityId: finalEntityId,
+        },
+        url: publicUrl,
+        success: true,
+      }, { status: 200 })
+    }
   } catch (error: any) {
     console.error('Error in upload route:', error)
     return NextResponse.json(
       { 
         error: error.message || 'Failed to upload file', 
         success: false,
-        details: error.stack
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       },
       { status: 500 }
     )

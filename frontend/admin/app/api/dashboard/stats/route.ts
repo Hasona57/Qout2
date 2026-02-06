@@ -1,65 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
-    // Get all stats in parallel
-    const [
-      productsResult,
-      ordersResult,
-      invoicesResult,
-      lowStockResult,
-    ] = await Promise.all([
-      supabase.from('products').select('id', { count: 'exact' }).eq('isActive', true),
-      supabase.from('orders').select('id', { count: 'exact' }),
-      supabase.from('invoices').select('id', { count: 'exact' }).eq('status', 'paid'),
-      supabase
-        .from('stock_items')
-        .select('id')
-        .lt('quantity', 10),
+    // Get all data
+    const [products, orders, invoices, stockItems] = await Promise.all([
+      db.getAll('products'),
+      db.getAll('orders'),
+      db.getAll('invoices'),
+      db.getAll('stock_items'),
     ])
+
+    // Calculate stats
+    const activeProducts = products.filter((p: any) => p.isActive === true).length
+    const paidInvoices = invoices.filter((i: any) => i.status === 'paid').length
+    const lowStock = stockItems.filter((s: any) => (s.quantity || 0) < 10).length
 
     // Get recent activity (last 10 orders and invoices)
-    const [recentOrders, recentInvoices] = await Promise.all([
-      supabase
-        .from('orders')
-        .select('id, createdAt, status, total')
-        .order('createdAt', { ascending: false })
-        .limit(5),
-      supabase
-        .from('invoices')
-        .select('id, createdAt, status, total')
-        .order('createdAt', { ascending: false })
-        .limit(5),
-    ])
-
-    const recentActivity = [
-      ...(recentOrders.data || []).map((order: any) => ({
+    const recentOrders = orders
+      .sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+      .slice(0, 5)
+      .map((order: any) => ({
         id: order.id,
         type: 'order',
         date: order.createdAt,
         status: order.status,
-        amount: order.total,
-      })),
-      ...(recentInvoices.data || []).map((invoice: any) => ({
+        amount: order.total || 0,
+      }))
+
+    const recentInvoices = invoices
+      .sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+      .slice(0, 5)
+      .map((invoice: any) => ({
         id: invoice.id,
         type: 'invoice',
         date: invoice.createdAt,
         status: invoice.status,
-        amount: invoice.total,
-      })),
-    ]
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        amount: invoice.total || 0,
+      }))
+
+    const recentActivity = [...recentOrders, ...recentInvoices]
+      .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
       .slice(0, 10)
 
     return NextResponse.json({
       data: {
-        products: productsResult.count || 0,
-        orders: ordersResult.count || 0,
-        sales: invoicesResult.count || 0,
-        lowStock: lowStockResult.data?.length || 0,
+        products: activeProducts,
+        orders: orders.length,
+        sales: paidInvoices,
+        lowStock: lowStock,
         recentActivity,
       },
       success: true,

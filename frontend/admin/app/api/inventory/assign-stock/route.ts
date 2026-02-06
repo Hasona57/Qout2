@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
     console.log('=== ASSIGN STOCK DEBUG ===')
     console.log('VariantId:', variantId)
@@ -21,16 +21,8 @@ export async function POST(request: NextRequest) {
     console.log('Quantity:', quantity)
 
     // Check if stock item exists
-    const { data: existingStock, error: checkError } = await supabase
-      .from('stock_items')
-      .select('*')
-      .eq('variantId', variantId)
-      .eq('locationId', locationId)
-      .maybeSingle()
-
-    if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows found
-      console.error('Error checking existing stock:', checkError)
-    }
+    const allStock = await db.getAll('stock_items')
+    const existingStock = allStock.find((s: any) => s.variantId === variantId && s.locationId === locationId)
 
     if (existingStock) {
       console.log('Existing stock found:', existingStock)
@@ -38,58 +30,36 @@ export async function POST(request: NextRequest) {
       const newQuantity = (existingStock.quantity || 0) + parseFloat(quantity)
       console.log('Updating stock - old quantity:', existingStock.quantity, 'new quantity:', newQuantity)
       
-      const { data: updatedStock, error } = await supabase
-        .from('stock_items')
-        .update({
-          quantity: newQuantity,
-          minStockLevel: minStockLevel !== undefined ? parseFloat(minStockLevel) : existingStock.minStockLevel,
-        })
-        .eq('id', existingStock.id)
-        .select()
-        .single()
+      await db.update(`stock_items/${existingStock.id}`, {
+        ...existingStock,
+        quantity: newQuantity,
+        minStockLevel: minStockLevel !== undefined ? parseFloat(minStockLevel) : existingStock.minStockLevel,
+        updatedAt: new Date().toISOString(),
+      })
 
-      if (error) {
-        console.error('Error updating stock:', error)
-        console.error('Error details:', error.message, error.code, error.details, error.hint)
-        return NextResponse.json({ 
-          error: error.message || 'Failed to update stock', 
-          success: false,
-          details: process.env.NODE_ENV === 'development' ? error : undefined
-        }, { status: 500 })
-      }
-
+      const updatedStock = await db.get(`stock_items/${existingStock.id}`)
       console.log('Stock updated successfully:', updatedStock)
       return NextResponse.json({ data: updatedStock, success: true })
     } else {
       console.log('No existing stock found - creating new stock item')
       // Create new stock item
+      const stockId = Date.now().toString(36) + Math.random().toString(36).substr(2)
       const stockData = {
+        id: stockId,
         variantId,
         locationId,
         quantity: parseFloat(quantity),
         reservedQuantity: 0,
         minStockLevel: minStockLevel ? parseFloat(minStockLevel) : 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       }
       console.log('Inserting stock data:', stockData)
       
-      const { data: newStock, error } = await supabase
-        .from('stock_items')
-        .insert(stockData)
-        .select()
-        .single()
+      await db.set(`stock_items/${stockId}`, stockData)
 
-      if (error) {
-        console.error('Error creating stock:', error)
-        console.error('Error details:', error.message, error.code, error.details, error.hint)
-        return NextResponse.json({ 
-          error: error.message || 'Failed to create stock', 
-          success: false,
-          details: process.env.NODE_ENV === 'development' ? error : undefined
-        }, { status: 500 })
-      }
-
-      console.log('Stock created successfully:', newStock)
-      return NextResponse.json({ data: newStock, success: true })
+      console.log('Stock created successfully:', stockData)
+      return NextResponse.json({ data: stockData, success: true })
     }
   } catch (error: any) {
     console.error('Error in assign-stock route:', error)

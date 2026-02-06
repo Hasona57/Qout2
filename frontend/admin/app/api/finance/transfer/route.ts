@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,15 +13,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
-    // Get payment methods
-    const { data: paymentMethods } = await supabase
-      .from('payment_methods')
-      .select('*')
+    // Get payment methods (hardcoded for now, or get from database)
+    const paymentMethods = [
+      { code: 'cash', nameEn: 'Cash' },
+      { code: 'cash_pos', nameEn: 'Cash POS' },
+      { code: 'cod', nameEn: 'Cash on Delivery' },
+      { code: 'vodafone_cash', nameEn: 'Vodafone Cash' },
+      { code: 'instapay', nameEn: 'Instapay' },
+      { code: 'fawry', nameEn: 'Fawry' },
+    ]
 
-    const fromMethodData = paymentMethods?.find((m: any) => m.code === fromMethod || m.id === fromMethod)
-    const toMethodData = paymentMethods?.find((m: any) => m.code === toMethod || m.id === toMethod)
+    const fromMethodData = paymentMethods.find((m: any) => m.code === fromMethod || m.id === fromMethod)
+    const toMethodData = paymentMethods.find((m: any) => m.code === toMethod || m.id === toMethod)
 
     if (!fromMethodData || !toMethodData) {
       return NextResponse.json(
@@ -31,41 +36,34 @@ export async function POST(request: NextRequest) {
     }
 
     const transferAmount = parseFloat(amount)
+    const transferDate = new Date().toISOString()
 
-    // Create transfer record (if safe_transactions table exists)
+    // Create transfer record in safe_transactions
     try {
-      const { data: transfer, error: transferError } = await supabase
-        .from('safe_transactions')
-        .insert({
-          type: 'transfer',
-          amount: transferAmount.toString(),
-          fromMethod: fromMethodData.code,
-          toMethod: toMethodData.code,
-          notes: notes || `Transfer from ${fromMethodData.nameEn} to ${toMethodData.nameEn}`,
-          createdAt: new Date().toISOString(),
-        })
-        .select()
-        .single()
-
-      if (transferError && transferError.code !== 'PGRST116') {
-        console.error('Error creating transfer record:', transferError)
-      }
+      const transferId = Date.now().toString(36) + Math.random().toString(36).substr(2)
+      await db.set(`safe_transactions/${transferId}`, {
+        id: transferId,
+        type: 'transfer',
+        amount: transferAmount.toString(),
+        fromMethod: fromMethodData.code,
+        toMethod: toMethodData.code,
+        notes: notes || `Transfer from ${fromMethodData.nameEn} to ${toMethodData.nameEn}`,
+        createdAt: transferDate,
+      })
     } catch (e) {
-      // Table might not exist, continue anyway
       console.log('Could not create transfer record:', e)
     }
 
-    // Create two payment records: one expense (from) and one income (to)
-    // This is a simplified approach - in a real system, you'd have a proper safe/balance table
-    const transferDate = new Date().toISOString()
-
     // Record as expense from source method
-    await supabase.from('expenses').insert({
+    const expenseId = Date.now().toString(36) + Math.random().toString(36).substr(2) + 'exp'
+    await db.set(`expenses/${expenseId}`, {
+      id: expenseId,
       title: `Transfer to ${toMethodData.nameEn}`,
       amount: transferAmount,
       type: 'transfer',
       description: notes || `Money transferred from ${fromMethodData.nameEn} to ${toMethodData.nameEn}`,
       date: transferDate,
+      createdAt: transferDate,
       isRecurring: false,
       paymentMethod: fromMethodData.code,
     })
@@ -89,6 +87,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message || 'Failed to transfer money', success: false }, { status: 500 })
   }
 }
+
+
+
+
 
 
 

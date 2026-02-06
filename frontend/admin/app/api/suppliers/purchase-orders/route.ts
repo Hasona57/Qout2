@@ -1,20 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
     // Get purchase orders first
-    let { data: purchaseOrders, error } = await supabase
-      .from('purchase_orders')
-      .select('*')
-      .order('createdAt', { ascending: false })
+    let purchaseOrders = await db.getAll('purchase_orders')
 
-    if (error) {
-      console.error('Error fetching purchase orders:', error)
-      return NextResponse.json({ data: [], success: true })
-    }
+    // Sort by createdAt descending
+    purchaseOrders.sort((a: any, b: any) => {
+      const dateA = new Date(a.createdAt || 0).getTime()
+      const dateB = new Date(b.createdAt || 0).getTime()
+      return dateB - dateA
+    })
 
     // Get related data
     if (purchaseOrders && purchaseOrders.length > 0) {
@@ -22,24 +21,22 @@ export async function GET(request: NextRequest) {
       const supplierIds = [...new Set(purchaseOrders.map((po: any) => po.supplierId).filter(Boolean))]
 
       // Get items
-      const { data: items } = await supabase
-        .from('purchase_order_items')
-        .select('*')
-        .in('purchaseOrderId', orderIds)
+      const allItems = await db.getAll('purchase_order_items')
+      const items = allItems.filter((item: any) => orderIds.includes(item.purchaseOrderId))
 
       // Get suppliers
-      const { data: suppliers } = supplierIds.length > 0 ? await supabase
-        .from('suppliers')
-        .select('*')
-        .in('id', supplierIds) : { data: [] }
+      const allSuppliers = await db.getAll('suppliers')
+      const suppliers = supplierIds.length > 0 
+        ? allSuppliers.filter((s: any) => supplierIds.includes(s.id))
+        : []
 
-      const supplierMap = new Map((suppliers || []).map((s: any) => [s.id, s]))
+      const supplierMap = new Map(suppliers.map((s: any) => [s.id, s]))
 
       // Combine data
       purchaseOrders = purchaseOrders.map((po: any) => ({
         ...po,
         supplier: supplierMap.get(po.supplierId) || null,
-        items: (items || []).filter((item: any) => item.purchaseOrderId === po.id),
+        items: items.filter((item: any) => item.purchaseOrderId === po.id),
       }))
     }
 
@@ -53,18 +50,17 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
-    const { data: purchaseOrder, error } = await supabase
-      .from('purchase_orders')
-      .insert(body)
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error creating purchase order:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    const purchaseOrderId = Date.now().toString(36) + Math.random().toString(36).substr(2)
+    const purchaseOrder = {
+      id: purchaseOrderId,
+      ...body,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     }
+
+    await db.set(`purchase_orders/${purchaseOrderId}`, purchaseOrder)
 
     return NextResponse.json({ data: purchaseOrder, success: true })
   } catch (error: any) {

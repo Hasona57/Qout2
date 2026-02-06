@@ -164,3 +164,7 @@ ORDER BY table_name;
 3. ✅ عيّن مخزون من صفحة Inventory → Assign Stock
 4. ✅ اختبر النظام للتأكد من أن كل شيء يعمل
 
+
+
+
+

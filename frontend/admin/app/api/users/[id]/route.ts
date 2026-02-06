@@ -1,36 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
+import { getUserRole } from '@/lib/firebase-helpers'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
-    // Get user first
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', params.id)
-      .single()
+    // Get user
+    const user = await db.get(`users/${params.id}`)
 
-    if (error || !user) {
-      console.error('Error fetching user:', error)
+    if (!user) {
       return NextResponse.json({ data: null, success: false, error: 'User not found' }, { status: 404 })
     }
 
     // Get role
-    const { data: role } = user.roleId ? await supabase
-      .from('roles')
-      .select('*')
-      .eq('id', user.roleId)
-      .single() : { data: null }
+    const role = user.roleId ? await getUserRole(user.roleId) : null
 
     const { password, ...userWithoutPassword } = user
     return NextResponse.json({ 
       data: {
         ...userWithoutPassword,
+        id: params.id,
         role: role || null,
       }, 
       success: true 
@@ -47,21 +40,21 @@ export async function PATCH(
 ) {
   try {
     const body = await request.json()
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
-    const { data: user, error } = await supabase
-      .from('users')
-      .update(body)
-      .eq('id', params.id)
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error updating user:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    const existingUser = await db.get(`users/${params.id}`)
+    if (!existingUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    const { password, ...userWithoutPassword } = user
+    await db.update(`users/${params.id}`, {
+      ...existingUser,
+      ...body,
+      updatedAt: new Date().toISOString(),
+    })
+
+    const updatedUser = await db.get(`users/${params.id}`)
+    const { password, ...userWithoutPassword } = updatedUser
     return NextResponse.json({ data: userWithoutPassword, success: true })
   } catch (error: any) {
     console.error('Error updating user:', error)
@@ -74,17 +67,9 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
-    const { error } = await supabase
-      .from('users')
-      .delete()
-      .eq('id', params.id)
-
-    if (error) {
-      console.error('Error deleting user:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
+    await db.remove(`users/${params.id}`)
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

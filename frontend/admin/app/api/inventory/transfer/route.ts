@@ -1,21 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
-    const { data: transfersData, error } = await supabase
-      .from('stock_transfers')
-      .select('*')
-      .order('createdAt', { ascending: false })
-
-    if (error) {
-      console.error('Error fetching transfers:', error)
-      return NextResponse.json({ data: [], success: true })
-    }
-
-    let transfers = transfersData || []
+    let transfers = await db.getAll('stock_transfers')
+    
+    // Sort by createdAt descending
+    transfers.sort((a: any, b: any) => {
+      const dateA = new Date(a.createdAt || 0).getTime()
+      const dateB = new Date(b.createdAt || 0).getTime()
+      return dateB - dateA
+    })
 
     // Get related data
     if (transfers && transfers.length > 0) {
@@ -25,12 +22,10 @@ export async function GET(request: NextRequest) {
       ].filter(Boolean)
       const locationIds = [...new Set(allLocationIds)]
 
-      const { data: locations } = locationIds.length > 0 ? await supabase
-        .from('stock_locations')
-        .select('*')
-        .in('id', locationIds) : { data: [] }
+      const allLocations = await db.getAll('stock_locations')
+      const locations = allLocations.filter((l: any) => locationIds.includes(l.id))
 
-      const locationMap = new Map((locations || []).map((l: any) => [l.id, l]))
+      const locationMap = new Map(locations.map((l: any) => [l.id, l]))
 
       transfers = transfers.map((transfer: any) => ({
         ...transfer,
@@ -65,10 +60,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
     // Validate all items first before creating transfer
     const validationErrors: string[] = []
+    const allStock = await db.getAll('stock_items')
+    
     for (const item of items) {
       const { variantId, quantity } = item
       const qty = parseFloat(String(quantity))
@@ -79,14 +76,9 @@ export async function POST(request: NextRequest) {
       }
 
       // Check source stock
-      const { data: sourceStock, error: stockError } = await supabase
-        .from('stock_items')
-        .select('*')
-        .eq('variantId', variantId)
-        .eq('locationId', fromLocationId)
-        .single()
+      const sourceStock = allStock.find((s: any) => s.variantId === variantId && s.locationId === fromLocationId)
 
-      if (stockError || !sourceStock) {
+      if (!sourceStock) {
         validationErrors.push(`No stock found for variant ${variantId} at source location`)
         continue
       }
@@ -104,43 +96,36 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate transfer number
+    // Generate transfer number and ID
     const transferNumber = `TRF-${Date.now()}`
+    const transferId = Date.now().toString(36) + Math.random().toString(36).substr(2)
 
     // Create transfer record
-    const { data: transfer, error: transferError } = await supabase
-      .from('stock_transfers')
-      .insert({
-        transferNumber,
-        fromLocationId,
-        toLocationId,
-        status: 'pending',
-        notes: notes || null,
-      })
-      .select()
-      .single()
-
-    if (transferError) {
-      console.error('Error creating transfer:', transferError)
-      return NextResponse.json({ error: transferError.message, success: false }, { status: 500 })
+    const transfer = {
+      id: transferId,
+      transferNumber,
+      fromLocationId,
+      toLocationId,
+      status: 'pending',
+      notes: notes || null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     }
+
+    await db.set(`stock_transfers/${transferId}`, transfer)
 
     // Create transfer items and update stock
     for (const item of items) {
       const { variantId, quantity } = item
       const qty = parseFloat(String(quantity))
 
-      // Get source stock again (to ensure we have latest data)
-      const { data: sourceStock, error: sourceError } = await supabase
-        .from('stock_items')
-        .select('*')
-        .eq('variantId', variantId)
-        .eq('locationId', fromLocationId)
-        .single()
+      // Get source stock again (refresh from database)
+      const currentStock = await db.getAll('stock_items')
+      const sourceStock = currentStock.find((s: any) => s.variantId === variantId && s.locationId === fromLocationId)
 
-      if (sourceError || !sourceStock) {
+      if (!sourceStock) {
         // Rollback transfer
-        await supabase.from('stock_transfers').delete().eq('id', transfer.id)
+        await db.remove(`stock_transfers/${transferId}`)
         return NextResponse.json(
           { error: `Stock not found for variant ${variantId} at source location`, success: false },
           { status: 400 }
@@ -150,7 +135,7 @@ export async function POST(request: NextRequest) {
       const availableQty = parseFloat(String(sourceStock.quantity || 0))
       if (availableQty < qty) {
         // Rollback transfer
-        await supabase.from('stock_transfers').delete().eq('id', transfer.id)
+        await db.remove(`stock_transfers/${transferId}`)
         return NextResponse.json(
           { error: `Insufficient stock for variant ${variantId}. Available: ${availableQty}, Requested: ${qty}`, success: false },
           { status: 400 }
@@ -158,101 +143,58 @@ export async function POST(request: NextRequest) {
       }
 
       // Create transfer item
-      const { error: itemError } = await supabase.from('stock_transfer_items').insert({
-        transferId: transfer.id,
+      const transferItemId = Date.now().toString(36) + Math.random().toString(36).substr(2) + 'item'
+      await db.set(`stock_transfer_items/${transferItemId}`, {
+        id: transferItemId,
+        transferId: transferId,
         variantId,
         quantity: qty,
+        createdAt: new Date().toISOString(),
       })
-
-      if (itemError) {
-        console.error('Error creating transfer item:', itemError)
-        // Rollback transfer
-        await supabase.from('stock_transfers').delete().eq('id', transfer.id)
-        return NextResponse.json(
-          { error: `Failed to create transfer item: ${itemError.message}`, success: false },
-          { status: 500 }
-        )
-      }
 
       // Update source location (decrease)
       const newSourceQty = availableQty - qty
-      const { error: updateSourceError } = await supabase
-        .from('stock_items')
-        .update({ quantity: newSourceQty })
-        .eq('id', sourceStock.id)
-
-      if (updateSourceError) {
-        console.error('Error updating source stock:', updateSourceError)
-        // Rollback transfer and items
-        await supabase.from('stock_transfer_items').delete().eq('transferId', transfer.id)
-        await supabase.from('stock_transfers').delete().eq('id', transfer.id)
-        return NextResponse.json(
-          { error: `Failed to update source stock: ${updateSourceError.message}`, success: false },
-          { status: 500 }
-        )
-      }
+      await db.update(`stock_items/${sourceStock.id}`, {
+        ...sourceStock,
+        quantity: newSourceQty,
+        updatedAt: new Date().toISOString(),
+      })
 
       // Update or create destination location (increase)
-      const { data: destStock, error: destError } = await supabase
-        .from('stock_items')
-        .select('*')
-        .eq('variantId', variantId)
-        .eq('locationId', toLocationId)
-        .single()
+      const destStock = currentStock.find((s: any) => s.variantId === variantId && s.locationId === toLocationId)
 
       if (destStock) {
         const newDestQty = parseFloat(String(destStock.quantity || 0)) + qty
-        const { error: updateDestError } = await supabase
-          .from('stock_items')
-          .update({ quantity: newDestQty })
-          .eq('id', destStock.id)
-
-        if (updateDestError) {
-          console.error('Error updating destination stock:', updateDestError)
-          // Rollback everything
-          await supabase.from('stock_items').update({ quantity: availableQty }).eq('id', sourceStock.id)
-          await supabase.from('stock_transfer_items').delete().eq('transferId', transfer.id)
-          await supabase.from('stock_transfers').delete().eq('id', transfer.id)
-          return NextResponse.json(
-            { error: `Failed to update destination stock: ${updateDestError.message}`, success: false },
-            { status: 500 }
-          )
-        }
+        await db.update(`stock_items/${destStock.id}`, {
+          ...destStock,
+          quantity: newDestQty,
+          updatedAt: new Date().toISOString(),
+        })
       } else {
-        const { error: insertDestError } = await supabase.from('stock_items').insert({
+        const destStockId = Date.now().toString(36) + Math.random().toString(36).substr(2) + 'dest'
+        await db.set(`stock_items/${destStockId}`, {
+          id: destStockId,
           variantId,
           locationId: toLocationId,
           quantity: qty,
           reservedQuantity: 0,
           minStockLevel: sourceStock.minStockLevel || 0,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         })
-
-        if (insertDestError) {
-          console.error('Error creating destination stock:', insertDestError)
-          // Rollback everything
-          await supabase.from('stock_items').update({ quantity: availableQty }).eq('id', sourceStock.id)
-          await supabase.from('stock_transfer_items').delete().eq('transferId', transfer.id)
-          await supabase.from('stock_transfers').delete().eq('id', transfer.id)
-          return NextResponse.json(
-            { error: `Failed to create destination stock: ${insertDestError.message}`, success: false },
-            { status: 500 }
-          )
-        }
       }
     }
 
     // Update transfer status to completed
-    const { error: statusError } = await supabase
-      .from('stock_transfers')
-      .update({ status: 'completed', completedAt: new Date().toISOString() })
-      .eq('id', transfer.id)
+    await db.update(`stock_transfers/${transferId}`, {
+      ...transfer,
+      status: 'completed',
+      completedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
 
-    if (statusError) {
-      console.error('Error updating transfer status:', statusError)
-      // Transfer succeeded but status update failed - log but don't fail
-    }
-
-    return NextResponse.json({ data: transfer, success: true })
+    const completedTransfer = await db.get(`stock_transfers/${transferId}`)
+    return NextResponse.json({ data: completedTransfer, success: true })
   } catch (error: any) {
     console.error('Error in transfer route:', error)
     console.error('Error stack:', error.stack)

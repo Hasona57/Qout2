@@ -157,3 +157,7 @@ SELECT
 FROM stock_items
 WHERE quantity > 0;
 
+
+
+
+

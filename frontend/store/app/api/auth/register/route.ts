@@ -1,88 +1,73 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
-import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this'
+import { getFirebaseServer } from '@/lib/firebase'
+import { getUserRole, createUserProfile } from '@/lib/firebase-helpers'
+import { createUserWithEmailPassword } from '@/lib/firebase-auth-server'
 
 export async function POST(request: NextRequest) {
   try {
     const { name, email, password, phone } = await request.json()
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
-    // Check if user exists
-    const { data: existingUser } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', email)
-      .single()
+    // Check if user exists in database
+    const users = await db.getAll('users')
+    const existingUser = users.find((u: any) => u.email === email)
 
     if (existingUser) {
       return NextResponse.json({ error: 'Email already registered' }, { status: 400 })
     }
 
     // Find customer role
-    const { data: customerRole, error: roleError } = await supabase
-      .from('roles')
-      .select('id')
-      .eq('name', 'customer')
-      .single()
+    const roles = await db.getAll('roles')
+    const customerRole = roles.find((r: any) => r.name === 'customer')
 
-    if (roleError || !customerRole) {
+    if (!customerRole) {
       return NextResponse.json({ error: 'Customer role not found. Please run database seeds first.' }, { status: 500 })
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10)
-
-    // Create user
-    const { data: user, error } = await supabase
-      .from('users')
-      .insert({
-        name,
-        email,
-        password: hashedPassword,
-        phone,
-        roleId: customerRole.id,
-        isActive: true,
-      })
-      .select('*')
-      .single()
-
-    if (error) {
-      console.error('Registration error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    // Create user in Firebase Auth
+    let authResult
+    try {
+      authResult = await createUserWithEmailPassword(email, password)
+    } catch (authError: any) {
+      console.error('Firebase auth registration error:', authError)
+      const errorMessage = authError.message || 'Registration failed'
+      if (errorMessage.includes('EMAIL_EXISTS')) {
+        return NextResponse.json({ error: 'Email already registered' }, { status: 400 })
+      }
+      return NextResponse.json({ error: errorMessage }, { status: 500 })
     }
 
+    if (!authResult || !authResult.uid) {
+      return NextResponse.json({ error: 'Failed to create user' }, { status: 500 })
+    }
+
+    // Create user profile in Firebase Realtime Database
+    const userData = {
+      name,
+      email,
+      phone: phone || null,
+      roleId: customerRole.id,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    await createUserProfile(authResult.uid, userData)
+
     // Get role
-    const { data: role } = await supabase
-      .from('roles')
-      .select('*')
-      .eq('id', user.roleId)
-      .single()
+    const role = await getUserRole(customerRole.id)
 
-    // Generate JWT token
-    const token = jwt.sign(
-      { 
-        sub: user.id, 
-        email: user.email, 
-        role: role?.name || 'customer' 
-      },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    )
-
-    // Remove password from response
-    const { password: _, ...userWithoutPassword } = user
+    // Use Firebase Auth token
+    const token = authResult.idToken
 
     return NextResponse.json({
       data: {
         access_token: token,
         user: {
-          id: userWithoutPassword.id,
-          name: userWithoutPassword.name,
-          email: userWithoutPassword.email,
-          phone: userWithoutPassword.phone,
+          id: authResult.uid,
+          name,
+          email,
+          phone: phone || null,
           role: role || null,
         },
       },

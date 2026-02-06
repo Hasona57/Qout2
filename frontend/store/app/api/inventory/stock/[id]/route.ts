@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function GET(
   request: NextRequest,
@@ -13,39 +13,22 @@ export async function GET(
       )
     }
 
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
     // Get stock items for this variant
-    const { data: stockData, error } = await supabase
-      .from('stock_items')
-      .select('*')
-      .eq('variantId', params.id)
+    const allStock = await db.getAll('stock_items')
+    let stock = allStock.filter((s: any) => s.variantId === params.id)
 
-    if (error) {
-      console.error('Error fetching stock for variant:', params.id, error)
-      console.error('Error details:', error.message, error.code, error.details)
-      return NextResponse.json({ 
-        data: [], 
-        success: false,
-        error: error.message || 'Failed to fetch stock',
-        details: process.env.NODE_ENV === 'development' ? error : undefined
-      }, { status: 500 })
-    }
-
-    console.log(`Fetched ${stockData?.length || 0} stock items for variant ${params.id}`)
-
-    let stock = stockData || []
+    console.log(`Fetched ${stock?.length || 0} stock items for variant ${params.id}`)
 
     // Get related data
     if (stock && stock.length > 0) {
       const locationIds = [...new Set(stock.map((s: any) => s.locationId).filter(Boolean))]
 
-      const { data: locations } = locationIds.length > 0 ? await supabase
-        .from('stock_locations')
-        .select('*')
-        .in('id', locationIds) : { data: [] }
+      const allLocations = await db.getAll('stock_locations')
+      const locations = allLocations.filter((l: any) => locationIds.includes(l.id))
 
-      const locationMap = new Map((locations || []).map((l: any) => [l.id, l]))
+      const locationMap = new Map(locations.map((l: any) => [l.id, l]))
 
       stock = stock.map((item: any) => ({
         ...item,

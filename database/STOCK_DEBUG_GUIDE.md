@@ -152,3 +152,7 @@ ALTER TABLE stock_items DISABLE ROW LEVEL SECURITY;
 3. اختبر صفحة Inventory مرة أخرى
 4. تحقق من Console و Vercel Logs للتأكد من عدم وجود أخطاء
 
+
+
+
+

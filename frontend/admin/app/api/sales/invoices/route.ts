@@ -1,52 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
-    // First try to get invoices with relations
-    let { data: invoices, error } = await supabase
-      .from('invoices')
-      .select('*')
-      .order('createdAt', { ascending: false })
+    // Get all invoices
+    let invoices = await db.getAll('invoices')
+    
+    // Sort by createdAt descending
+    invoices.sort((a: any, b: any) => {
+      const dateA = new Date(a.createdAt || 0).getTime()
+      const dateB = new Date(b.createdAt || 0).getTime()
+      return dateB - dateA
+    })
 
-    if (error) {
-      console.error('Error fetching invoices:', error)
-      // Return empty array instead of error to prevent 502
-      return NextResponse.json({ data: [], success: true })
-    }
-
-    // If we have invoices, try to get related data
+    // Get related data
     if (invoices && invoices.length > 0) {
       const invoiceIds = invoices.map((inv: any) => inv.id)
       
       // Get invoice items
-      const { data: items } = await supabase
-        .from('invoice_items')
-        .select('*')
-        .in('invoiceId', invoiceIds)
+      const allItems = await db.getAll('invoice_items')
+      const items = allItems.filter((item: any) => invoiceIds.includes(item.invoiceId))
 
       // Get payments
-      const { data: payments } = await supabase
-        .from('payments')
-        .select('*')
-        .in('invoiceId', invoiceIds)
+      const allPayments = await db.getAll('payments')
+      const payments = allPayments.filter((pay: any) => invoiceIds.includes(pay.invoiceId))
 
       // Get users
       const userIds = [...new Set(invoices.map((inv: any) => inv.createdById).filter(Boolean))]
-      const { data: users } = userIds.length > 0 ? await supabase
-        .from('users')
-        .select('id, name, email')
-        .in('id', userIds) : { data: [] }
+      const allUsers = await db.getAll('users')
+      const users = allUsers.filter((u: any) => userIds.includes(u.id))
 
-      const userMap = new Map((users || []).map((u: any) => [u.id, u]))
+      const userMap = new Map(users.map((u: any) => [u.id, { id: u.id, name: u.name, email: u.email }]))
 
       // Combine data
       invoices = invoices.map((invoice: any) => ({
         ...invoice,
-        items: (items || []).filter((item: any) => item.invoiceId === invoice.id),
-        payments: (payments || []).filter((pay: any) => pay.invoiceId === invoice.id),
+        items: items.filter((item: any) => item.invoiceId === invoice.id),
+        payments: payments.filter((pay: any) => pay.invoiceId === invoice.id),
         createdBy: userMap.get(invoice.createdById) || null,
       }))
     }

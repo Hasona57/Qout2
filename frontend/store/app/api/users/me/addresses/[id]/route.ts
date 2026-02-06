@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function DELETE(
   request: NextRequest,
@@ -13,19 +13,13 @@ export async function DELETE(
       )
     }
 
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
-    const { error } = await supabase
-      .from('user_addresses')
-      .delete()
-      .eq('id', params.id)
-
-    if (error) {
-      console.error('Error deleting address:', error)
-      return NextResponse.json(
-        { error: error.message || 'Failed to delete address', success: false },
-        { status: 500 }
-      )
+    // Try addresses table first, then user_addresses
+    try {
+      await db.remove(`addresses/${params.id}`)
+    } catch {
+      await db.remove(`user_addresses/${params.id}`)
     }
 
     return NextResponse.json({ success: true })
@@ -37,6 +31,10 @@ export async function DELETE(
     )
   }
 }
+
+
+
+
 
 
 

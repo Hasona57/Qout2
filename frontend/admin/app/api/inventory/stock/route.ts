@@ -1,103 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const locationId = searchParams.get('locationId')
 
-    const supabase = getSupabaseServer()
-
-    // First, check if there are ANY stock items at all (for debugging)
-    const { data: allStockCheck, error: allStockError } = await supabase
-      .from('stock_items')
-      .select('id, locationId, variantId, quantity')
-      .limit(5)
+    const { db } = getFirebaseServer()
 
     console.log('=== STOCK API DEBUG ===')
     console.log('LocationId requested:', locationId)
-    console.log('Total stock items in DB (sample):', allStockCheck?.length || 0)
-    if (allStockCheck && allStockCheck.length > 0) {
-      console.log('Sample stock items:', JSON.stringify(allStockCheck, null, 2))
-    }
-    if (allStockError) {
-      console.error('Error checking all stock:', allStockError)
-    }
 
-    // Get stock items - show all items (including 0 quantity) for admin view
-    let stockQuery = supabase
-      .from('stock_items')
-      .select('*')
+    // Get all stock items
+    let stock = await db.getAll('stock_items')
 
+    // Filter by locationId if provided
     if (locationId) {
-      stockQuery = stockQuery.eq('locationId', locationId)
+      stock = stock.filter((s: any) => s.locationId === locationId)
       console.log('Filtering by locationId:', locationId)
-    } else {
-      console.log('No locationId filter - fetching all stock items')
     }
 
-    const { data: stockData, error } = await stockQuery
-
-    if (error) {
-      console.error('Error fetching stock:', error)
-      console.error('Error details:', error.message, error.code, error.details, error.hint)
-      return NextResponse.json({ 
-        data: [], 
-        success: false, 
-        error: error.message || 'Failed to fetch stock',
-        details: process.env.NODE_ENV === 'development' ? error : undefined
-      }, { status: 500 })
-    }
-
-    console.log(`Fetched ${stockData?.length || 0} stock items for locationId: ${locationId || 'all'}`)
-    if (stockData && stockData.length > 0) {
-      console.log('Sample stock item:', JSON.stringify(stockData[0], null, 2))
-    } else {
-      console.warn('No stock items found!')
-      // Check if location exists
-      if (locationId) {
-        const { data: locationCheck } = await supabase
-          .from('stock_locations')
-          .select('id, name')
-          .eq('id', locationId)
-          .single()
-        console.log('Location check:', locationCheck)
-      }
-    }
-    let stock = stockData || []
+    console.log(`Fetched ${stock?.length || 0} stock items for locationId: ${locationId || 'all'}`)
 
     // Get related data
     if (stock && stock.length > 0) {
       const variantIds = [...new Set(stock.map((s: any) => s.variantId).filter(Boolean))]
       const locationIds = [...new Set(stock.map((s: any) => s.locationId).filter(Boolean))]
 
-      const [variantsResult, locationsResult] = await Promise.all([
-        variantIds.length > 0 ? supabase.from('product_variants').select('*').in('id', variantIds) : { data: [] },
-        locationIds.length > 0 ? supabase.from('stock_locations').select('*').in('id', locationIds) : { data: [] },
+      const [variants, locations, products, sizes, colors] = await Promise.all([
+        db.getAll('product_variants').then(v => v.filter((v: any) => variantIds.includes(v.id))),
+        db.getAll('stock_locations').then(l => l.filter((l: any) => locationIds.includes(l.id))),
+        db.getAll('products'),
+        db.getAll('sizes'),
+        db.getAll('colors'),
       ])
 
-      const variants = variantsResult.data || []
       const productIds = [...new Set(variants.map((v: any) => v.productId).filter(Boolean))]
-      
-      // Get products
-      const { data: products } = productIds.length > 0 ? await supabase
-        .from('products')
-        .select('*')
-        .in('id', productIds) : { data: [] }
+      const relevantProducts = products.filter((p: any) => productIds.includes(p.id))
 
-      // Get sizes and colors for variants
-      const sizeIds = [...new Set(variants.map((v: any) => v.sizeId).filter(Boolean))]
-      const colorIds = [...new Set(variants.map((v: any) => v.colorId).filter(Boolean))]
-
-      const [sizesResult, colorsResult] = await Promise.all([
-        sizeIds.length > 0 ? supabase.from('sizes').select('*').in('id', sizeIds) : { data: [] },
-        colorIds.length > 0 ? supabase.from('colors').select('*').in('id', colorIds) : { data: [] },
-      ])
-
-      const productMap = new Map((products || []).map((p: any) => [p.id, p]))
-      const sizeMap = new Map((sizesResult.data || []).map((s: any) => [s.id, s]))
-      const colorMap = new Map((colorsResult.data || []).map((c: any) => [c.id, c]))
-      const locationMap = new Map((locationsResult.data || []).map((l: any) => [l.id, l]))
+      const productMap = new Map(relevantProducts.map((p: any) => [p.id, p]))
+      const sizeMap = new Map(sizes.map((s: any) => [s.id, s]))
+      const colorMap = new Map(colors.map((c: any) => [c.id, c]))
+      const locationMap = new Map(locations.map((l: any) => [l.id, l]))
 
       stock = stock.map((item: any) => {
         const variant = variants.find((v: any) => v.id === item.variantId)

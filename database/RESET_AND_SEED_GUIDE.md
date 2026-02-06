@@ -156,3 +156,7 @@ SELECT 'Payment Methods', COUNT(*) FROM payment_methods;
 - UUIDs يتم توليدها تلقائياً
 - السكريبت آمن للتشغيل المتكرر (idempotent)
 
+
+
+
+

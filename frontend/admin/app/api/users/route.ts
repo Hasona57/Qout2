@@ -1,32 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
-    // Get users first
-    const { data: users, error } = await supabase
-      .from('users')
-      .select('*')
-      .order('createdAt', { ascending: false })
-
-    if (error) {
-      console.error('Error fetching users:', error)
-      return NextResponse.json({ data: [], success: true })
-    }
+    // Get all users
+    let users = await db.getAll('users')
+    
+    // Sort by createdAt descending
+    users.sort((a: any, b: any) => {
+      const dateA = new Date(a.createdAt || 0).getTime()
+      const dateB = new Date(b.createdAt || 0).getTime()
+      return dateB - dateA
+    })
 
     // Get roles
-    const roleIds = [...new Set((users || []).map((u: any) => u.roleId).filter(Boolean))]
-    const { data: roles } = roleIds.length > 0 ? await supabase
-      .from('roles')
-      .select('*')
-      .in('id', roleIds) : { data: [] }
+    const roleIds = [...new Set(users.map((u: any) => u.roleId).filter(Boolean))]
+    const allRoles = await db.getAll('roles')
+    const roles = allRoles.filter((r: any) => roleIds.includes(r.id))
 
-    const roleMap = new Map((roles || []).map((r: any) => [r.id, r]))
+    const roleMap = new Map(roles.map((r: any) => [r.id, r]))
 
     // Remove passwords and add roles
-    const usersWithoutPasswords = (users || []).map((user: any) => {
+    const usersWithoutPasswords = users.map((user: any) => {
       const { password, ...userWithoutPassword } = user
       return {
         ...userWithoutPassword,

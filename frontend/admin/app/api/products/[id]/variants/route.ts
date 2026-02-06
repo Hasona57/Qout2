@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function POST(
   request: NextRequest,
@@ -13,7 +13,7 @@ export async function POST(
       )
     }
 
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
     
     let body: any = {}
     try {
@@ -46,13 +46,9 @@ export async function POST(
     }
 
     // Check if product exists
-    const { data: product, error: productError } = await supabase
-      .from('products')
-      .select('id, costPrice, retailPrice')
-      .eq('id', params.id)
-      .single()
+    const product = await db.get(`products/${params.id}`)
 
-    if (productError || !product) {
+    if (!product) {
       return NextResponse.json(
         { error: 'Product not found', success: false },
         { status: 404 }
@@ -60,19 +56,12 @@ export async function POST(
     }
 
     // Check if variant already exists (by size/color combination)
-    const { data: existingVariants, error: checkError } = await supabase
-      .from('product_variants')
-      .select('id')
-      .eq('productId', params.id)
-      .eq('sizeId', sizeId)
-      .eq('colorId', colorId)
+    const allVariants = await db.getAll('product_variants')
+    const existingVariants = allVariants.filter((v: any) => 
+      v.productId === params.id && v.sizeId === sizeId && v.colorId === colorId
+    )
 
-    // If checkError is not "no rows found", log it but continue
-    if (checkError && checkError.code !== 'PGRST116') {
-      console.error('Error checking existing variant:', checkError)
-    }
-
-    if (existingVariants && existingVariants.length > 0) {
+    if (existingVariants.length > 0) {
       return NextResponse.json(
         { error: 'Variant with this size and color already exists', success: false },
         { status: 400 }
@@ -80,17 +69,9 @@ export async function POST(
     }
 
     // Check if SKU already exists (SKU must be unique)
-    const { data: existingSku, error: skuCheckError } = await supabase
-      .from('product_variants')
-      .select('id')
-      .eq('sku', sku)
-      .limit(1)
+    const existingSku = allVariants.find((v: any) => v.sku === sku)
 
-    if (skuCheckError && skuCheckError.code !== 'PGRST116') {
-      console.error('Error checking existing SKU:', skuCheckError)
-    }
-
-    if (existingSku && existingSku.length > 0) {
+    if (existingSku) {
       return NextResponse.json(
         { error: 'SKU already exists. Please use a unique SKU', success: false },
         { status: 400 }
@@ -98,7 +79,9 @@ export async function POST(
     }
 
     // Create variant
+    const variantId = Date.now().toString(36) + Math.random().toString(36).substr(2)
     const variantData: any = {
+      id: variantId,
       productId: params.id,
       sizeId,
       colorId,
@@ -106,6 +89,8 @@ export async function POST(
       weight: weight ? parseFloat(String(weight)) : 0.5,
       barcode: barcode || null,
       isActive: isActive !== false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     }
 
     // Handle costPrice and retailPrice
@@ -160,37 +145,9 @@ export async function POST(
       )
     }
 
-    const { data: variant, error: variantError } = await supabase
-      .from('product_variants')
-      .insert(variantData)
-      .select()
-      .single()
+    await db.set(`product_variants/${variantId}`, variantData)
 
-    if (variantError) {
-      console.error('Error creating variant:', variantError)
-      console.error('Variant data attempted:', JSON.stringify(variantData, null, 2))
-      console.error('Error code:', variantError.code)
-      console.error('Error details:', variantError.details)
-      console.error('Error hint:', variantError.hint)
-      
-      return NextResponse.json(
-        { 
-          error: variantError.message || 'Failed to create variant', 
-          success: false,
-          details: variantError.details || variantError.hint || variantError.code || undefined
-        },
-        { status: 500 }
-      )
-    }
-
-    if (!variant) {
-      return NextResponse.json(
-        { error: 'Variant created but no data returned', success: false },
-        { status: 500 }
-      )
-    }
-
-    return NextResponse.json({ data: variant, success: true })
+    return NextResponse.json({ data: variantData, success: true })
   } catch (error: any) {
     console.error('Error in POST variants route:', error)
     console.error('Error stack:', error.stack)

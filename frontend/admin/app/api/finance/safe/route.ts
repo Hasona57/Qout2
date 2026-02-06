@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function GET(request: NextRequest) {
   try {
@@ -7,40 +7,21 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
 
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
-    // Get safe transactions - try different table names
+    // Get safe transactions - try safe_transactions first, then fallback to payments/invoices
     let transactions: any[] = []
-    let error: any = null
     
-    // Try safe_transactions first
-    let safeQuery = supabase
-      .from('safe_transactions')
-      .select('*')
-      .order('createdAt', { ascending: false })
-    
-    if (startDate) {
-      safeQuery = safeQuery.gte('createdAt', startDate)
-    }
-    if (endDate) {
-      const endDateWithTime = `${endDate}T23:59:59.999Z`
-      safeQuery = safeQuery.lte('createdAt', endDateWithTime)
-    }
-    
-    const result = await safeQuery
-    transactions = result.data || []
-    error = result.error
-    
-    // If table doesn't exist, try to get data from payments and invoices
-    if (error && (error.code === 'PGRST116' || error.message?.includes('does not exist'))) {
-      // Get data from payments and invoices instead
-      const [paymentsResult, invoicesResult] = await Promise.all([
-        supabase.from('payments').select('*').order('createdAt', { ascending: false }),
-        supabase.from('invoices').select('*').eq('status', 'paid').order('createdAt', { ascending: false }),
+    try {
+      transactions = await db.getAll('safe_transactions')
+    } catch (error) {
+      // If table doesn't exist, get data from payments and invoices
+      const [payments, invoices] = await Promise.all([
+        db.getAll('payments'),
+        db.getAll('invoices'),
       ])
       
-      const payments = paymentsResult.data || []
-      const invoices = invoicesResult.data || []
+      const paidInvoices = invoices.filter((inv: any) => inv.status === 'paid')
       
       // Transform to safe transaction format
       transactions = [
@@ -51,50 +32,42 @@ export async function GET(request: NextRequest) {
           method: p.paymentMethod || 'unknown',
           code: p.paymentMethod || 'unknown',
           date: p.createdAt || p.date,
+          createdAt: p.createdAt || p.date,
           reference: `PAY-${p.id?.substring(0, 8)}`,
         })),
-        ...invoices.map((inv: any) => ({
+        ...paidInvoices.map((inv: any) => ({
           id: inv.id,
           type: 'income',
           amount: inv.total || '0',
           method: 'Invoice',
           code: 'invoice',
           date: inv.createdAt,
+          createdAt: inv.createdAt,
           reference: inv.invoiceNumber || `INV-${inv.id?.substring(0, 8)}`,
         })),
       ]
-      
-      // Filter by date if provided
-      if (startDate || endDate) {
-        transactions = transactions.filter((t: any) => {
-          const tDate = new Date(t.date)
-          if (startDate && tDate < new Date(startDate)) return false
-          if (endDate) {
-            const end = new Date(endDate)
-            end.setHours(23, 59, 59, 999)
-            if (tDate > end) return false
-          }
-          return true
-        })
-      }
-      
-      error = null
     }
-
-
-    if (error) {
-      console.error('Error fetching safe status:', error)
-      // If table doesn't exist, return empty data
-      return NextResponse.json({
-        data: {
-          balance: '0.00',
-          transactions: [],
-          totalIncome: '0.00',
-          totalExpenses: '0.00',
-        },
-        success: true,
+    
+    // Filter by date if provided
+    if (startDate || endDate) {
+      transactions = transactions.filter((t: any) => {
+        const tDate = new Date(t.date || t.createdAt)
+        if (startDate && tDate < new Date(startDate)) return false
+        if (endDate) {
+          const end = new Date(endDate)
+          end.setHours(23, 59, 59, 999)
+          if (tDate > end) return false
+        }
+        return true
       })
     }
+    
+    // Sort by date descending
+    transactions.sort((a: any, b: any) => {
+      const dateA = new Date(a.date || a.createdAt || 0).getTime()
+      const dateB = new Date(b.date || b.createdAt || 0).getTime()
+      return dateB - dateA
+    })
 
     // Calculate balance and breakdown
     const totalIncome = (transactions || [])

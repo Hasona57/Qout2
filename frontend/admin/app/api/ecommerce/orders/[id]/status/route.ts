@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function PATCH(
   request: NextRequest,
@@ -7,26 +7,30 @@ export async function PATCH(
 ) {
   try {
     const body = await request.json()
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
-    const { data: order, error } = await supabase
-      .from('orders')
-      .update({ status: body.status })
-      .eq('id', params.id)
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error updating order status:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    const existingOrder = await db.get(`orders/${params.id}`)
+    if (!existingOrder) {
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ data: order, success: true })
+    await db.update(`orders/${params.id}`, {
+      ...existingOrder,
+      status: body.status,
+      updatedAt: new Date().toISOString(),
+    })
+
+    const updatedOrder = await db.get(`orders/${params.id}`)
+    return NextResponse.json({ data: updatedOrder, success: true })
   } catch (error: any) {
     console.error('Error updating order status:', error)
     return NextResponse.json({ error: error.message || 'Failed to update order status' }, { status: 500 })
   }
 }
+
+
+
+
 
 
 

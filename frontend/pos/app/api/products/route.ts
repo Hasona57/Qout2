@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
     const { searchParams } = new URL(request.url)
     
     const categoryId = searchParams.get('categoryId')
@@ -11,87 +11,49 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search')
     const locationId = searchParams.get('locationId')
 
-    // Get products first
-    let { data, error } = await supabase
-      .from('products')
-      .select('*')
-
-    if (error) {
-      console.error('Error fetching products:', error)
-      return NextResponse.json({ data: [], success: true })
-    }
+    // Get all products
+    let products = await db.getAll('products')
 
     // Filter data
-    if (data) {
-      if (isActive === 'true') {
-        data = data.filter((p: any) => p.isActive === true)
-      }
-      if (categoryId) {
-        data = data.filter((p: any) => p.categoryId === categoryId)
-      }
-      if (search) {
-        const searchLower = search.toLowerCase()
-        data = data.filter((p: any) => 
-          (p.nameAr && p.nameAr.toLowerCase().includes(searchLower)) ||
-          (p.nameEn && p.nameEn.toLowerCase().includes(searchLower))
-        )
-      }
+    if (isActive === 'true') {
+      products = products.filter((p: any) => p.isActive === true)
+    }
+    if (categoryId) {
+      products = products.filter((p: any) => p.categoryId === categoryId)
+    }
+    if (search) {
+      const searchLower = search.toLowerCase()
+      products = products.filter((p: any) => 
+        (p.nameAr && p.nameAr.toLowerCase().includes(searchLower)) ||
+        (p.nameEn && p.nameEn.toLowerCase().includes(searchLower))
+      )
     }
 
     // Get related data
-    if (data && data.length > 0) {
-      const productIds = data.map((p: any) => p.id)
-      const categoryIds = [...new Set(data.map((p: any) => p.categoryId).filter(Boolean))]
+    if (products && products.length > 0) {
+      const productIds = products.map((p: any) => p.id)
+      const categoryIds = [...new Set(products.map((p: any) => p.categoryId).filter(Boolean))]
 
-      // Get variants
-      const { data: variants } = await supabase
-        .from('product_variants')
-        .select('*')
-        .in('productId', productIds)
-
-      // Get images
-      const { data: images } = await supabase
-        .from('product_images')
-        .select('*')
-        .in('productId', productIds)
-
-      // Get categories
-      const { data: categories } = categoryIds.length > 0 ? await supabase
-        .from('categories')
-        .select('*')
-        .in('id', categoryIds) : { data: [] }
-
-      const categoryMap = new Map((categories || []).map((c: any) => [c.id, c]))
-
-      // Get sizes and colors for variants
-      const sizeIds = [...new Set((variants || []).map((v: any) => v.sizeId).filter(Boolean))]
-      const colorIds = [...new Set((variants || []).map((v: any) => v.colorId).filter(Boolean))]
-
-      const [sizesResult, colorsResult] = await Promise.all([
-        sizeIds.length > 0 ? supabase.from('sizes').select('*').in('id', sizeIds) : { data: [] },
-        colorIds.length > 0 ? supabase.from('colors').select('*').in('id', colorIds) : { data: [] },
+      // Get variants, images, categories, sizes, colors, stock
+      const [variants, images, categories, sizes, colors, stockItems] = await Promise.all([
+        db.getAll('product_variants').then(v => v.filter((v: any) => productIds.includes(v.productId))),
+        db.getAll('product_images').then(i => i.filter((i: any) => productIds.includes(i.productId))),
+        categoryIds.length > 0 ? db.getAll('categories').then(c => c.filter((c: any) => categoryIds.includes(c.id))) : Promise.resolve([]),
+        db.getAll('sizes'),
+        db.getAll('colors'),
+        locationId ? db.getAll('stock_items').then(s => s.filter((s: any) => s.locationId === locationId)) : Promise.resolve([]),
       ])
 
-      const sizeMap = new Map((sizesResult.data || []).map((s: any) => [s.id, s]))
-      const colorMap = new Map((colorsResult.data || []).map((c: any) => [c.id, c]))
-
-      // Get stock if locationId provided
-      let stockMap = new Map()
-      if (locationId && variants) {
-        const variantIds = variants.map((v: any) => v.id)
-        const { data: stockData } = await supabase
-          .from('stock_items')
-          .select('variantId, quantity')
-          .eq('locationId', locationId)
-          .in('variantId', variantIds)
-        stockMap = new Map((stockData || []).map((s: any) => [s.variantId, s.quantity]))
-      }
+      const categoryMap = new Map(categories.map((c: any) => [c.id, c]))
+      const sizeMap = new Map(sizes.map((s: any) => [s.id, s]))
+      const colorMap = new Map(colors.map((c: any) => [c.id, c]))
+      const stockMap = new Map(stockItems.map((s: any) => [s.variantId, s.quantity]))
 
       // Combine data
-      data = data.map((product: any) => ({
+      products = products.map((product: any) => ({
         ...product,
         category: categoryMap.get(product.categoryId) || null,
-        variants: (variants || [])
+        variants: variants
           .filter((v: any) => v.productId === product.id)
           .map((v: any) => ({
             ...v,
@@ -99,11 +61,11 @@ export async function GET(request: NextRequest) {
             color: colorMap.get(v.colorId) || null,
             stockQuantity: stockMap.get(v.id) || 0,
           })),
-        images: (images || []).filter((img: any) => img.productId === product.id),
+        images: images.filter((img: any) => img.productId === product.id),
       }))
     }
 
-    return NextResponse.json({ data: data || [], success: true })
+    return NextResponse.json({ data: products || [], success: true })
   } catch (error: any) {
     console.error('API error:', error)
     return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })

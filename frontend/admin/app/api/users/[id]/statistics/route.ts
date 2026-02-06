@@ -1,34 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
-    // Get user's orders, invoices, and sales statistics
-    const [ordersResult, invoicesResult] = await Promise.all([
-      supabase
-        .from('orders')
-        .select('id, total, status, createdAt')
-        .eq('userId', params.id),
-      supabase
-        .from('invoices')
-        .select('id, total, status, createdAt')
-        .eq('userId', params.id),
+    // Get user's orders and invoices
+    const [allOrders, allInvoices, allInvoiceItems] = await Promise.all([
+      db.getAll('orders'),
+      db.getAll('invoices'),
+      db.getAll('invoice_items'),
     ])
 
-    const orders = ordersResult.data || []
-    const invoices = invoicesResult.data || []
+    const orders = allOrders.filter((o: any) => o.userId === params.id)
+    const invoices = allInvoices.filter((inv: any) => inv.userId === params.id)
 
     const totalOrders = orders.length
     const totalInvoices = invoices.length
-    const totalPiecesSold = invoices.reduce((sum, inv) => {
-      // This would need invoice_items join, simplified for now
-      return sum
-    }, 0)
+    
+    // Calculate total pieces sold from invoice items
+    const invoiceIds = invoices.map((inv: any) => inv.id)
+    const relevantItems = allInvoiceItems.filter((item: any) => invoiceIds.includes(item.invoiceId))
+    const totalPiecesSold = relevantItems.reduce((sum, item) => sum + (item.quantity || 0), 0)
 
     const totalSales = invoices
       .filter((inv) => inv.status === 'paid')
@@ -51,6 +47,10 @@ export async function GET(
     return NextResponse.json({ error: error.message || 'Failed to fetch user statistics' }, { status: 500 })
   }
 }
+
+
+
+
 
 
 

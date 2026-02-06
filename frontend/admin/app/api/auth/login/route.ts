@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
-import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this'
+import { getFirebaseServer } from '@/lib/firebase'
+import { getUserRole, updateUserLastLogin } from '@/lib/firebase-helpers'
+import { signInWithEmailPassword } from '@/lib/firebase-auth-server'
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,82 +10,64 @@ export async function POST(request: NextRequest) {
     if (!email || !password) {
       return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
     }
-    
-    const supabase = getSupabaseServer()
 
     console.log('=== LOGIN DEBUG ===')
     console.log('Email:', email)
 
-    // Find user first
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', email)
-      .eq('isActive', true)
-      .single()
-
-    if (error) {
-      console.error('Error finding user:', error)
-      console.error('Error code:', error.code)
-      console.error('Error message:', error.message)
+    // Authenticate with Firebase Auth using REST API
+    let authResult
+    try {
+      authResult = await signInWithEmailPassword(email, password)
+    } catch (authError: any) {
+      console.error('Firebase auth error:', authError)
+      const errorMessage = authError.message || 'Authentication failed'
+      if (errorMessage.includes('INVALID_PASSWORD') || errorMessage.includes('EMAIL_NOT_FOUND') || errorMessage.includes('INVALID_LOGIN_CREDENTIALS')) {
+        return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
+      }
+      return NextResponse.json({ error: errorMessage }, { status: 401 })
     }
 
-    if (error || !user) {
-      console.log('User not found or inactive')
+    if (!authResult || !authResult.uid) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
 
-    console.log('User found:', user.id, user.email)
-    console.log('User password hash length:', user.password?.length)
+    // Get user profile from Firebase Realtime Database
+    const { db } = getFirebaseServer()
+    const userProfile = await db.get(`users/${authResult.uid}`)
+
+    if (!userProfile) {
+      console.error('User profile not found in database')
+      return NextResponse.json({ error: 'User profile not found' }, { status: 401 })
+    }
+
+    if (userProfile.isActive === false) {
+      console.log('User is inactive')
+      return NextResponse.json({ error: 'Account is inactive' }, { status: 401 })
+    }
+
+    console.log('User found:', userProfile.id, userProfile.email)
 
     // Get role
-    const { data: role } = user.roleId ? await supabase
-      .from('roles')
-      .select('*')
-      .eq('id', user.roleId)
-      .single() : { data: null }
-
-    // Verify password
-    console.log('Comparing password...')
-    const isValid = await bcrypt.compare(password, user.password)
-    console.log('Password valid:', isValid)
-    
-    if (!isValid) {
-      console.log('Invalid password')
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
-    }
+    const role = userProfile.roleId ? await getUserRole(userProfile.roleId) : null
 
     // Update last login
-    await supabase
-      .from('users')
-      .update({ lastLoginAt: new Date().toISOString() })
-      .eq('id', user.id)
+    await updateUserLastLogin(authResult.uid)
 
-    // Generate JWT token
-    const token = jwt.sign(
-      { 
-        sub: user.id, 
-        email: user.email, 
-        role: role?.name || 'customer' 
-      },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    )
+    // Use Firebase Auth token
+    const token = authResult.idToken
 
-    // Remove password from response
-    const { password: _, ...userWithoutPassword } = user
-
+    // Return user data without sensitive information
     return NextResponse.json({
       data: {
         access_token: token,
         user: {
-          id: userWithoutPassword.id,
-          name: userWithoutPassword.name,
-          email: userWithoutPassword.email,
-          phone: userWithoutPassword.phone,
+          id: userProfile.id || authResult.uid,
+          name: userProfile.name,
+          email: userProfile.email || authResult.email,
+          phone: userProfile.phone,
           role: role || null,
-          commissionRate: userWithoutPassword.commissionRate,
-          employeeCode: userWithoutPassword.employeeCode,
+          commissionRate: userProfile.commissionRate || 0,
+          employeeCode: userProfile.employeeCode,
         },
       },
       success: true,

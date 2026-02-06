@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseServer()
-
-    const { data: locations, error } = await supabase
-      .from('stock_locations')
-      .select('*')
-      .eq('isActive', true)
-      .order('name', { ascending: true })
-
-    if (error) {
-      console.error('Error fetching locations:', error)
-      return NextResponse.json({ data: [], success: true })
-    }
+    const { db } = getFirebaseServer()
+    let locations = await db.getAll('stock_locations')
+    
+    // Filter active and sort
+    locations = locations.filter((l: any) => l.isActive !== false)
+    locations.sort((a: any, b: any) => {
+      const nameA = (a.name || '').toLowerCase()
+      const nameB = (b.name || '').toLowerCase()
+      return nameA.localeCompare(nameB)
+    })
 
     return NextResponse.json({ data: locations || [], success: true })
   } catch (error: any) {
@@ -22,6 +20,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ data: [], success: true })
   }
 }
+
+
+
+
 
 
 

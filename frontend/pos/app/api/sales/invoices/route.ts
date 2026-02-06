@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
-import jwt from 'jsonwebtoken'
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this'
+import { getFirebaseServer } from '@/lib/firebase'
+import { verifyIdToken } from '@/lib/firebase-auth-server'
 
 async function getUserIdFromToken(request: NextRequest): Promise<string | null> {
   try {
@@ -11,8 +9,7 @@ async function getUserIdFromToken(request: NextRequest): Promise<string | null> 
       return null
     }
     const token = authHeader.substring(7)
-    const decoded = jwt.verify(token, JWT_SECRET) as any
-    return decoded.sub || decoded.id || null
+    return await verifyIdToken(token)
   } catch {
     return null
   }
@@ -30,7 +27,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
     const userId = await getUserIdFromToken(request)
 
     if (!userId) {
@@ -44,6 +41,9 @@ export async function POST(request: NextRequest) {
     let subtotal = 0
     const invoiceItems = []
 
+    // Get all variants for cost price lookup
+    const allVariants = await db.getAll('product_variants')
+
     for (const item of items) {
       const { variantId, quantity, unitPrice, costPrice } = item
       const qty = parseFloat(quantity) || 0
@@ -52,12 +52,7 @@ export async function POST(request: NextRequest) {
       subtotal += itemTotal
 
       // Get variant to get cost price if not provided
-      const { data: variant } = await supabase
-        .from('product_variants')
-        .select('costPrice')
-        .eq('id', variantId)
-        .single()
-
+      const variant = allVariants.find((v: any) => v.id === variantId)
       const itemCostPrice = costPrice || parseFloat(variant?.costPrice || '0')
 
       invoiceItems.push({
@@ -75,66 +70,55 @@ export async function POST(request: NextRequest) {
     const taxAmount = parseFloat(body.taxAmount || '0')
     const total = subtotal - discountAmount + taxAmount
 
-    // Generate invoice number
+    // Generate invoice number and ID
     const invoiceNumber = `INV-${Date.now()}`
+    const invoiceId = Date.now().toString(36) + Math.random().toString(36).substr(2)
 
     // Create invoice
-    const { data: invoice, error: invoiceError } = await supabase
-      .from('invoices')
-      .insert({
-        invoiceNumber,
-        customerId: customerId || null,
-        createdById: userId,
-        status: 'pending',
-        saleType: 'retail',
-        subtotal: subtotal.toFixed(2),
-        discountAmount: discountAmount.toFixed(2),
-        taxAmount: taxAmount.toFixed(2),
-        total: total.toFixed(2),
-        paidAmount: '0',
-        commissionAmount: '0',
-        notes: notes || null,
-        locationId: locationId || null,
-      })
-      .select()
-      .single()
-
-    if (invoiceError) {
-      console.error('Error creating invoice:', invoiceError)
-      return NextResponse.json({ error: invoiceError.message, success: false }, { status: 500 })
+    const invoice = {
+      id: invoiceId,
+      invoiceNumber,
+      customerId: customerId || null,
+      createdById: userId,
+      status: 'pending',
+      saleType: 'retail',
+      subtotal: subtotal.toFixed(2),
+      discountAmount: discountAmount.toFixed(2),
+      taxAmount: taxAmount.toFixed(2),
+      total: total.toFixed(2),
+      paidAmount: '0',
+      commissionAmount: '0',
+      notes: notes || null,
+      locationId: locationId || null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     }
 
-    // Create invoice items
-    for (const item of invoiceItems) {
-      const { error: itemError } = await supabase
-        .from('invoice_items')
-        .insert({
-          invoiceId: invoice.id,
-          ...item,
-        })
+    await db.set(`invoices/${invoiceId}`, invoice)
 
-      if (itemError) {
-        console.error('Error creating invoice item:', itemError)
-        // Rollback invoice
-        await supabase.from('invoices').delete().eq('id', invoice.id)
-        return NextResponse.json({ error: 'Failed to create invoice items', success: false }, { status: 500 })
-      }
+    // Create invoice items and update stock
+    const allStock = await db.getAll('stock_items')
+    
+    for (const item of invoiceItems) {
+      const itemId = Date.now().toString(36) + Math.random().toString(36).substr(2) + 'item'
+      await db.set(`invoice_items/${itemId}`, {
+        id: itemId,
+        invoiceId: invoiceId,
+        ...item,
+        createdAt: new Date().toISOString(),
+      })
 
       // Update stock
       if (locationId) {
-        const { data: stock } = await supabase
-          .from('stock_items')
-          .select('*')
-          .eq('variantId', item.variantId)
-          .eq('locationId', locationId)
-          .single()
+        const stock = allStock.find((s: any) => s.variantId === item.variantId && s.locationId === locationId)
 
         if (stock) {
-          const newQuantity = (stock.quantity || 0) - item.quantity
-          await supabase
-            .from('stock_items')
-            .update({ quantity: Math.max(0, newQuantity) })
-            .eq('id', stock.id)
+          const newQuantity = Math.max(0, (stock.quantity || 0) - item.quantity)
+          await db.update(`stock_items/${stock.id}`, {
+            ...stock,
+            quantity: newQuantity,
+            updatedAt: new Date().toISOString(),
+          })
         }
       }
     }
@@ -145,6 +129,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message || 'Failed to create invoice', success: false }, { status: 500 })
   }
 }
+
+
+
+
 
 
 

@@ -1,29 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
     // Get all employees (users with employeeCode)
-    const { data: employees, error } = await supabase
-      .from('users')
-      .select('*')
-      .not('employeeCode', 'is', null)
+    const allUsers = await db.getAll('users')
+    const employees = allUsers.filter((u: any) => u.employeeCode != null && u.employeeCode !== '')
 
-    if (error) {
-      console.error('Error fetching payroll:', error)
-      return NextResponse.json({ 
-        data: { employees: [], totalEmployees: 0, totalMonthlyPayroll: 0 }, 
-        success: true 
-      })
-    }
+    // Calculate total monthly payroll
+    const totalMonthlyPayroll = employees.reduce((sum, emp) => {
+      return sum + parseFloat(emp.salary || 0)
+    }, 0)
 
     // Calculate payroll data
     const payrollData = {
       employees: employees || [],
-      totalEmployees: employees?.length || 0,
-      totalMonthlyPayroll: 0, // This would need salary field in users table
+      totalEmployees: employees.length,
+      totalMonthlyPayroll: totalMonthlyPayroll,
     }
 
     return NextResponse.json({ data: payrollData, success: true })

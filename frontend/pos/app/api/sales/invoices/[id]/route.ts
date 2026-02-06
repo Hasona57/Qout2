@@ -1,53 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
-    // Get invoice first
-    const { data: invoice, error } = await supabase
-      .from('invoices')
-      .select('*')
-      .eq('id', params.id)
-      .single()
+    // Get invoice
+    const invoice = await db.get(`invoices/${params.id}`)
 
-    if (error || !invoice) {
-      console.error('Error fetching invoice:', error)
+    if (!invoice) {
       return NextResponse.json({ data: null, success: false, error: 'Invoice not found' }, { status: 404 })
     }
 
     // Get related data
-    const invoiceId = invoice.id
+    const [allItems, allPayments, allVariants] = await Promise.all([
+      db.getAll('invoice_items'),
+      db.getAll('payments'),
+      db.getAll('product_variants'),
+    ])
 
-    // Get invoice items
-    const { data: items } = await supabase
-      .from('invoice_items')
-      .select('*')
-      .eq('invoiceId', invoiceId)
+    const items = allItems.filter((item: any) => item.invoiceId === params.id)
+    const payments = allPayments.filter((pay: any) => pay.invoiceId === params.id)
 
-    // Get payments
-    const { data: payments } = await supabase
-      .from('payments')
-      .select('*')
-      .eq('invoiceId', invoiceId)
-
-    // Get variant details for items
-    const variantIds = [...new Set((items || []).map((item: any) => item.variantId).filter(Boolean))]
-    const { data: variants } = variantIds.length > 0 ? await supabase
-      .from('product_variants')
-      .select('*')
-      .in('id', variantIds) : { data: [] }
-
-    const variantMap = new Map((variants || []).map((v: any) => [v.id, v]))
+    const variantIds = [...new Set(items.map((item: any) => item.variantId).filter(Boolean))]
+    const variants = allVariants.filter((v: any) => variantIds.includes(v.id))
+    const variantMap = new Map(variants.map((v: any) => [v.id, v]))
 
     // Combine data
     const invoiceWithDetails = {
       ...invoice,
-      items: (items || []).map((item: any) => ({
+      id: params.id,
+      items: items.map((item: any) => ({
         ...item,
         variant: variantMap.get(item.variantId) || null,
       })),
@@ -60,6 +46,10 @@ export async function GET(
     return NextResponse.json({ data: null, success: false, error: error.message })
   }
 }
+
+
+
+
 
 
 

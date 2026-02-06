@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
     const body = await request.json()
 
     const { variantId, quantity } = body
@@ -30,6 +30,10 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+
+
+
 
 
 

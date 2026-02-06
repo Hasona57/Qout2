@@ -1,26 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseServer()
-    const { data, error } = await supabase
-      .from('colors')
-      .select('*')
-      .eq('isActive', true)
-      .order('nameAr', { ascending: true })
+    const { db } = getFirebaseServer()
+    let colors = await db.getAll('colors')
+    
+    // Filter active and sort
+    colors = colors.filter((c: any) => c.isActive !== false)
+    colors.sort((a: any, b: any) => {
+      const nameA = (a.nameAr || '').toLowerCase()
+      const nameB = (b.nameAr || '').toLowerCase()
+      return nameA.localeCompare(nameB)
+    })
 
-    if (error) {
-      console.error('Error fetching colors:', error)
-      return NextResponse.json({ data: [], success: true })
-    }
-
-    return NextResponse.json({ data: data || [], success: true })
+    return NextResponse.json({ data: colors || [], success: true })
   } catch (error: any) {
     console.error('Error in colors route:', error)
     return NextResponse.json({ data: [], success: true })
   }
 }
+
+
+
+
 
 
 

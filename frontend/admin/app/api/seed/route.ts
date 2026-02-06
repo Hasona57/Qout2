@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
-import bcrypt from 'bcryptjs'
+import { getFirebaseServer } from '@/lib/firebase'
+import { createUserWithEmailPassword } from '@/lib/firebase-auth-server'
 
 // GET endpoint for easy browser access
 export async function GET(request: NextRequest) {
@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
 
 async function seedDatabase() {
   try {
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
     // Step 1: Create Permissions
     const permissions = [
@@ -31,25 +31,26 @@ async function seedDatabase() {
     ]
 
     const savedPermissionIds: string[] = []
+    const allPermissions = await db.getAll('permissions')
+    
     for (const perm of permissions) {
       // Check if permission exists
-      const { data: existing } = await supabase
-        .from('permissions')
-        .select('id')
-        .eq('name', perm.name)
-        .single()
+      const existing = allPermissions.find((p: any) => p.name === perm.name)
 
       if (!existing) {
-        const { data: newPerm, error } = await supabase
-          .from('permissions')
-          .insert(perm)
-          .select('id')
-          .single()
-
-        if (error) {
+        const permId = Date.now().toString(36) + Math.random().toString(36).substr(2) + 'perm'
+        const newPerm = {
+          id: permId,
+          ...perm,
+          createdAt: new Date().toISOString(),
+        }
+        
+        try {
+          await db.set(`permissions/${permId}`, newPerm)
+          savedPermissionIds.push(permId)
+          console.log(`✅ Created permission: ${perm.name}`)
+        } catch (error) {
           console.error(`Error creating permission ${perm.name}:`, error)
-        } else if (newPerm) {
-          savedPermissionIds.push(newPerm.id)
         }
       } else {
         savedPermissionIds.push(existing.id)
@@ -81,25 +82,26 @@ async function seedDatabase() {
     ]
 
     const roleMap: Record<string, string> = {}
+    const allRoles = await db.getAll('roles')
+    
     for (const roleData of roles) {
       // Check if role exists
-      const { data: existing } = await supabase
-        .from('roles')
-        .select('id')
-        .eq('name', roleData.name)
-        .single()
+      const existing = allRoles.find((r: any) => r.name === roleData.name)
 
       if (!existing) {
-        const { data: newRole, error } = await supabase
-          .from('roles')
-          .insert(roleData)
-          .select('id')
-          .single()
-
-        if (error) {
+        const roleId = Date.now().toString(36) + Math.random().toString(36).substr(2) + 'role'
+        const newRole = {
+          id: roleId,
+          ...roleData,
+          createdAt: new Date().toISOString(),
+        }
+        
+        try {
+          await db.set(`roles/${roleId}`, newRole)
+          roleMap[roleData.name] = roleId
+          console.log(`✅ Created role: ${roleData.name}`)
+        } catch (error) {
           console.error(`Error creating role ${roleData.name}:`, error)
-        } else if (newRole) {
-          roleMap[roleData.name] = newRole.id
         }
       } else {
         roleMap[roleData.name] = existing.id
@@ -111,30 +113,33 @@ async function seedDatabase() {
     const adminPassword = 'admin123'
 
     // Check if admin user exists
-    const { data: existingAdmin } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', adminEmail)
-      .single()
+    const allUsers = await db.getAll('users')
+    const existingAdmin = allUsers.find((u: any) => u.email === adminEmail)
 
     if (!existingAdmin && roleMap['admin']) {
-      const hashedPassword = await bcrypt.hash(adminPassword, 10)
-      const { data: adminUser, error: adminError } = await supabase
-        .from('users')
-        .insert({
+      try {
+        // Create user in Firebase Auth
+        const authResult = await createUserWithEmailPassword(adminEmail, adminPassword)
+        
+        // Create user profile in database
+        const adminUser = {
+          id: authResult.uid,
           name: 'Admin User',
           email: adminEmail,
-          password: hashedPassword,
           roleId: roleMap['admin'],
           isActive: true,
-        })
-        .select()
-        .single()
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
 
-      if (adminError) {
-        console.error('Error creating admin user:', adminError)
-      } else {
+        await db.set(`users/${authResult.uid}`, adminUser)
         console.log('✅ Created admin user:', adminEmail, '/', adminPassword)
+      } catch (error: any) {
+        console.error('Error creating admin user:', error)
+        // User might already exist in Firebase Auth
+        if (error.message && error.message.includes('EMAIL_EXISTS')) {
+          console.log('Admin user already exists in Firebase Auth')
+        }
       }
     }
 
@@ -142,32 +147,34 @@ async function seedDatabase() {
     const posEmail = 'pos@qote.com'
     const posPassword = 'pos123'
 
-    const { data: existingPos } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', posEmail)
-      .single()
+    const existingPos = allUsers.find((u: any) => u.email === posEmail)
 
     if (!existingPos && roleMap['sales_employee']) {
-      const hashedPassword = await bcrypt.hash(posPassword, 10)
-      const { data: posUser, error: posError } = await supabase
-        .from('users')
-        .insert({
+      try {
+        // Create user in Firebase Auth
+        const authResult = await createUserWithEmailPassword(posEmail, posPassword)
+        
+        // Create user profile in database
+        const posUser = {
+          id: authResult.uid,
           name: 'POS Sales Employee',
           email: posEmail,
-          password: hashedPassword,
           roleId: roleMap['sales_employee'],
           isActive: true,
           employeeCode: 'POS001',
           commissionRate: '5.00',
-        })
-        .select()
-        .single()
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
 
-      if (posError) {
-        console.error('Error creating POS user:', posError)
-      } else {
+        await db.set(`users/${authResult.uid}`, posUser)
         console.log('✅ Created POS user:', posEmail, '/', posPassword)
+      } catch (error: any) {
+        console.error('Error creating POS user:', error)
+        // User might already exist in Firebase Auth
+        if (error.message && error.message.includes('EMAIL_EXISTS')) {
+          console.log('POS user already exists in Firebase Auth')
+        }
       }
     }
 

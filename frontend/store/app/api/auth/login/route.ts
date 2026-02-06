@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
-import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this'
+import { getFirebaseServer } from '@/lib/firebase'
+import { getUserRole, updateUserLastLogin } from '@/lib/firebase-helpers'
+import { signInWithEmailPassword } from '@/lib/firebase-auth-server'
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,64 +10,69 @@ export async function POST(request: NextRequest) {
     if (!email || !password) {
       return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
     }
-    
-    const supabase = getSupabaseServer()
 
     console.log('=== STORE LOGIN DEBUG ===')
     console.log('Email:', email)
 
-    // Find user
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', email)
-      .single()
-
-    if (error) {
-      console.error('Error finding user:', error)
+    // Authenticate with Firebase Auth using REST API
+    let authResult
+    try {
+      authResult = await signInWithEmailPassword(email, password)
+    } catch (authError: any) {
+      console.error('Firebase auth error:', authError)
+      const errorMessage = authError.message || 'Authentication failed'
+      if (errorMessage.includes('INVALID_PASSWORD') || errorMessage.includes('EMAIL_NOT_FOUND') || errorMessage.includes('INVALID_LOGIN_CREDENTIALS')) {
+        return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
+      }
+      return NextResponse.json({ error: errorMessage }, { status: 401 })
     }
 
-    if (error || !user) {
+    if (!authResult || !authResult.uid) {
+      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
+    }
+
+    // Get user profile from Firebase Realtime Database
+    const { db } = getFirebaseServer()
+    const userProfile = await db.get(`users/${authResult.uid}`)
+
+    if (!userProfile) {
       console.log('User not found')
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
 
-    if (!user.isActive) {
+    if (userProfile.isActive === false) {
       console.log('User is inactive')
       return NextResponse.json({ error: 'Account is inactive' }, { status: 401 })
     }
 
-    console.log('User found:', user.id, user.email)
+    console.log('User found:', userProfile.id, userProfile.email)
 
-    // Verify password
-    console.log('Comparing password...')
-    const isValid = await bcrypt.compare(password, user.password)
-    console.log('Password valid:', isValid)
-    
-    if (!isValid) {
-      console.log('Invalid password')
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
-    }
+    // Get role
+    const role = userProfile.roleId ? await getUserRole(userProfile.roleId) : null
 
-    // Generate JWT token
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    )
+    // Update last login
+    await updateUserLastLogin(authResult.uid)
+
+    // Use Firebase Auth token
+    const token = authResult.idToken
 
     // Remove password from response
-    const { password: _, ...userWithoutPassword } = user
+    const { password: _, ...userWithoutPassword } = userProfile
 
     return NextResponse.json({
       data: {
         access_token: token,
-        user: userWithoutPassword,
+        user: {
+          ...userWithoutPassword,
+          id: userProfile.id || authResult.uid,
+          role: role || null,
+        },
       },
       success: true,
     })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('Login error:', error)
+    return NextResponse.json({ error: error.message || 'Login failed' }, { status: 500 })
   }
 }
 

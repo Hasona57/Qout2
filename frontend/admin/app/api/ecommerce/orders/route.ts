@@ -1,53 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
 
-    // Get orders first
-    let { data: orders, error } = await supabase
-      .from('orders')
-      .select('*')
-      .order('createdAt', { ascending: false })
-
-    if (error) {
-      console.error('Error fetching orders:', error)
-      return NextResponse.json({ data: [], success: true })
-    }
+    // Get all orders
+    let orders = await db.getAll('orders')
+    
+    // Sort by createdAt descending
+    orders.sort((a: any, b: any) => {
+      const dateA = new Date(a.createdAt || 0).getTime()
+      const dateB = new Date(b.createdAt || 0).getTime()
+      return dateB - dateA
+    })
 
     // Get related data
     if (orders && orders.length > 0) {
       const orderIds = orders.map((o: any) => o.id)
       
       // Get order items
-      const { data: items } = await supabase
-        .from('order_items')
-        .select('*')
-        .in('orderId', orderIds)
+      const allItems = await db.getAll('order_items')
+      const items = allItems.filter((item: any) => orderIds.includes(item.orderId))
 
       // Get variants for items
-      const variantIds = [...new Set((items || []).map((item: any) => item.variantId).filter(Boolean))]
-      const { data: variants } = variantIds.length > 0 ? await supabase
-        .from('product_variants')
-        .select('*')
-        .in('id', variantIds) : { data: [] }
+      const variantIds = [...new Set(items.map((item: any) => item.variantId).filter(Boolean))]
+      const allVariants = await db.getAll('product_variants')
+      const variants = allVariants.filter((v: any) => variantIds.includes(v.id))
 
-      const variantMap = new Map((variants || []).map((v: any) => [v.id, v]))
+      const variantMap = new Map(variants.map((v: any) => [v.id, v]))
 
       // Get users
       const userIds = [...new Set(orders.map((o: any) => o.userId).filter(Boolean))]
-      const { data: users } = userIds.length > 0 ? await supabase
-        .from('users')
-        .select('id, name, email')
-        .in('id', userIds) : { data: [] }
+      const allUsers = await db.getAll('users')
+      const users = allUsers.filter((u: any) => userIds.includes(u.id))
 
-      const userMap = new Map((users || []).map((u: any) => [u.id, u]))
+      const userMap = new Map(users.map((u: any) => [u.id, { id: u.id, name: u.name, email: u.email }]))
 
       // Combine data
       orders = orders.map((order: any) => ({
         ...order,
-        items: (items || []).filter((item: any) => item.orderId === order.id).map((item: any) => ({
+        items: items.filter((item: any) => item.orderId === order.id).map((item: any) => ({
           ...item,
           variant: variantMap.get(item.variantId) || null,
         })),

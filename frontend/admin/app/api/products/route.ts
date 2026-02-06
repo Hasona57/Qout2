@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase'
+import { getFirebaseServer } from '@/lib/firebase'
+import { getAllProducts } from '@/lib/firebase-db-helpers'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseServer()
     const { searchParams } = new URL(request.url)
     
     const categoryId = searchParams.get('categoryId')
@@ -11,99 +11,14 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search')
     const locationId = searchParams.get('locationId')
 
-    // Build query - get products first
-    let { data, error } = await supabase
-      .from('products')
-      .select('*')
+    const products = await getAllProducts({
+      categoryId: categoryId || undefined,
+      isActive: isActive === 'true' ? true : undefined,
+      search: search || undefined,
+      locationId: locationId || undefined,
+    })
 
-    if (error) {
-      console.error('Error fetching products:', error)
-      return NextResponse.json({ data: [], success: true })
-    }
-
-    // Filter data
-    if (data) {
-      if (isActive === 'true') {
-        data = data.filter((p: any) => p.isActive === true)
-      }
-      if (categoryId) {
-        data = data.filter((p: any) => p.categoryId === categoryId)
-      }
-      if (search) {
-        const searchLower = search.toLowerCase()
-        data = data.filter((p: any) => 
-          (p.nameAr && p.nameAr.toLowerCase().includes(searchLower)) ||
-          (p.nameEn && p.nameEn.toLowerCase().includes(searchLower))
-        )
-      }
-    }
-
-    // Get related data
-    if (data && data.length > 0) {
-      const productIds = data.map((p: any) => p.id)
-      const categoryIds = [...new Set(data.map((p: any) => p.categoryId).filter(Boolean))]
-
-      // Get variants
-      const { data: variants } = await supabase
-        .from('product_variants')
-        .select('*')
-        .in('productId', productIds)
-
-      // Get images
-      const { data: images } = await supabase
-        .from('product_images')
-        .select('*')
-        .in('productId', productIds)
-
-      // Get categories
-      const { data: categories } = categoryIds.length > 0 ? await supabase
-        .from('categories')
-        .select('*')
-        .in('id', categoryIds) : { data: [] }
-
-      const categoryMap = new Map((categories || []).map((c: any) => [c.id, c]))
-
-      // Get sizes and colors for variants
-      const sizeIds = [...new Set((variants || []).map((v: any) => v.sizeId).filter(Boolean))]
-      const colorIds = [...new Set((variants || []).map((v: any) => v.colorId).filter(Boolean))]
-
-      const [sizesResult, colorsResult] = await Promise.all([
-        sizeIds.length > 0 ? supabase.from('sizes').select('*').in('id', sizeIds) : { data: [] },
-        colorIds.length > 0 ? supabase.from('colors').select('*').in('id', colorIds) : { data: [] },
-      ])
-
-      const sizeMap = new Map((sizesResult.data || []).map((s: any) => [s.id, s]))
-      const colorMap = new Map((colorsResult.data || []).map((c: any) => [c.id, c]))
-
-      // Get stock if locationId provided
-      let stockMap = new Map()
-      if (locationId && variants) {
-        const variantIds = variants.map((v: any) => v.id)
-        const { data: stockData } = await supabase
-          .from('stock_items')
-          .select('variantId, quantity')
-          .eq('locationId', locationId)
-          .in('variantId', variantIds)
-        stockMap = new Map((stockData || []).map((s: any) => [s.variantId, s.quantity]))
-      }
-
-      // Combine data
-      data = data.map((product: any) => ({
-        ...product,
-        category: categoryMap.get(product.categoryId) || null,
-        variants: (variants || [])
-          .filter((v: any) => v.productId === product.id)
-          .map((v: any) => ({
-            ...v,
-            size: sizeMap.get(v.sizeId) || null,
-            color: colorMap.get(v.colorId) || null,
-            stockQuantity: stockMap.get(v.id) || 0,
-          })),
-        images: (images || []).filter((img: any) => img.productId === product.id),
-      }))
-    }
-
-    return NextResponse.json({ data: data || [], success: true })
+    return NextResponse.json({ data: products || [], success: true })
   } catch (error: any) {
     console.error('API error:', error)
     return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })
@@ -112,7 +27,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = getSupabaseServer()
+    const { db } = getFirebaseServer()
     let body: any = {}
     
     try {
@@ -151,8 +66,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Generate product ID
+    const productId = Date.now().toString(36) + Math.random().toString(36).substr(2)
+
     // Prepare product data
     const productData: any = {
+      id: productId,
       nameAr,
       nameEn,
       descriptionAr: descriptionAr || null,
@@ -163,97 +82,51 @@ export async function POST(request: NextRequest) {
       retailPrice: parseFloat(String(retailPrice || '0')) || 0,
       isActive: isActive !== false,
       isFeatured: isFeatured === true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     }
 
     console.log('Product data to insert:', JSON.stringify(productData, null, 2))
 
-    // Try to create product
-    const { data: product, error: productError } = await supabase
-      .from('products')
-      .insert(productData)
-      .select()
-      .single()
+    // Create product in Firebase
+    try {
+      await db.set(`products/${productId}`, productData)
+      console.log('Product created successfully:', productId)
 
-    if (productError) {
-      console.error('Error creating product:', productError)
-      console.error('Error code:', productError.code)
-      console.error('Error details:', productError.details)
-      console.error('Error hint:', productError.hint)
-      console.error('Error message:', productError.message)
-      
-      // Check if it's an RLS error
-      if (productError.code === '42501' || productError.message?.includes('permission denied') || productError.message?.includes('row-level security')) {
-        console.error('RLS Policy Error - Service role may not have proper permissions')
-        return NextResponse.json(
-          { 
-            error: 'Permission denied. Please check RLS policies for products table.', 
-            success: false,
-            details: process.env.NODE_ENV === 'development' ? {
-              code: productError.code,
-              details: productError.details,
-              hint: productError.hint,
-              message: 'Make sure to run enable_rls.sql in Supabase SQL Editor'
-            } : undefined
-          },
-          { status: 403 }
-        )
+      // Create product images if provided
+      if (images && images.length > 0) {
+        console.log('Creating product images:', images.length)
+        for (let index = 0; index < images.length; index++) {
+          const img = images[index]
+          const imageId = Date.now().toString(36) + Math.random().toString(36).substr(2) + index
+          const imageData = {
+            id: imageId,
+            productId: productId,
+            url: typeof img === 'string' ? img : (img.url || img),
+            altTextAr: typeof img === 'object' ? (img.altTextAr || null) : null,
+            altTextEn: typeof img === 'object' ? (img.altTextEn || null) : null,
+            sortOrder: index,
+            isPrimary: index === 0,
+            createdAt: new Date().toISOString(),
+          }
+          await db.set(`product_images/${imageId}`, imageData)
+        }
+        console.log('Product images created successfully')
       }
-      
+
+      console.log('Product creation completed successfully')
+      return NextResponse.json({ data: productData, success: true })
+    } catch (error: any) {
+      console.error('Error creating product:', error)
       return NextResponse.json(
         { 
-          error: productError.message || 'Failed to create product', 
+          error: error.message || 'Failed to create product', 
           success: false,
-          details: process.env.NODE_ENV === 'development' ? {
-            code: productError.code,
-            details: productError.details,
-            hint: productError.hint,
-            productData: productData
-          } : undefined
+          details: process.env.NODE_ENV === 'development' ? error.stack : undefined
         },
         { status: 500 }
       )
     }
-
-    if (!product) {
-      console.error('Product created but no data returned')
-      return NextResponse.json(
-        { error: 'Product created but no data returned', success: false },
-        { status: 500 }
-      )
-    }
-
-    console.log('Product created successfully:', product.id)
-
-    // Create product images if provided
-    if (images && images.length > 0 && product) {
-      console.log('Creating product images:', images.length)
-      const imageRecords = images.map((img: any, index: number) => ({
-        productId: product.id,
-        url: typeof img === 'string' ? img : (img.url || img),
-        altTextAr: typeof img === 'object' ? (img.altTextAr || null) : null,
-        altTextEn: typeof img === 'object' ? (img.altTextEn || null) : null,
-        sortOrder: index,
-        isPrimary: index === 0,
-      }))
-
-      console.log('Image records to insert:', JSON.stringify(imageRecords, null, 2))
-
-      const { error: imagesError } = await supabase
-        .from('product_images')
-        .insert(imageRecords)
-
-      if (imagesError) {
-        console.error('Error creating product images:', imagesError)
-        console.error('Error code:', imagesError.code)
-        console.error('Error details:', imagesError.details)
-        // Don't fail the whole request if images fail
-      } else {
-        console.log('Product images created successfully')
-      }
-    }
-
-    console.log('Product creation completed successfully')
-    return NextResponse.json({ data: product, success: true })
   } catch (error: any) {
     console.error('Error in POST products route:', error)
     console.error('Error stack:', error.stack)
