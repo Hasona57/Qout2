@@ -15,8 +15,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     if (!currentUser) {
       router.push('/login')
     } else {
-      setUser(currentUser)
-      setLoading(false)
+      // Check if user has admin role - SECURITY CHECK
+      if (currentUser.role?.name !== 'admin') {
+        console.error('Access denied: User does not have admin role', currentUser.role?.name)
+        // Clear user data and redirect
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        router.push('/login?error=access_denied')
+      } else {
+        setUser(currentUser)
+        setLoading(false)
+      }
     }
   }, [router])
 

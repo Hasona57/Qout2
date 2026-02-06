@@ -30,7 +30,11 @@ export async function login(email: string, password: string): Promise<AuthRespon
     let errorMessage = 'Login failed';
     try {
       const error = await response.json();
-      errorMessage = error.message || errorMessage;
+      errorMessage = error.error || error.message || errorMessage;
+      // Handle 403 Forbidden (access denied)
+      if (response.status === 403) {
+        errorMessage = 'Access denied. Admin role required.';
+      }
     } catch {
       errorMessage = `HTTP ${response.status}: ${response.statusText}`;
     }

@@ -50,6 +50,15 @@ export async function POST(request: NextRequest) {
     // Get role
     const role = userProfile.roleId ? await getUserRole(userProfile.roleId) : null
 
+    // Check if user has admin role - ADMIN PANEL ACCESS CONTROL
+    if (!role || role.name !== 'admin') {
+      console.log('Access denied: User does not have admin role', role?.name)
+      return NextResponse.json(
+        { error: 'Access denied. Admin role required.' },
+        { status: 403 }
+      )
+    }
+
     // Update last login
     await updateUserLastLogin(authResult.uid)
 

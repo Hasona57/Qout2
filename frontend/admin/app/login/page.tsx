@@ -1,15 +1,24 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { login } from '../../lib/auth'
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    // Check for access denied error from URL
+    const accessDenied = searchParams.get('error')
+    if (accessDenied === 'access_denied') {
+      setError('Access denied. Admin role required to access this panel.')
+    }
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -82,10 +91,25 @@ export default function LoginPage() {
         </form>
 
         <div className="mt-6 text-center text-sm text-gray-600">
-          <p>الافتراضي: admin@qout.com / admin123</p>
+          <p>الافتراضي: admin@qote.com / admin123</p>
         </div>
       </div>
     </div>
   )
 }
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-brown/10 via-brand-cafe to-brand-brown/20">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
+          <p className="text-gray-600">جاري التحميل...</p>
+        </div>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
+  )
+}
+
 
